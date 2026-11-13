@@ -26,6 +26,12 @@ npm run typecheck  # checagem de tipos
 npx expo lint      # padrões de código
 ```
 
+## versão web (vercel)
+
+o projeto já vem pronto para a vercel (`vercel.json`): ela roda `npx expo export --platform web`
+e publica a pasta `dist`. basta importar o repositório em vercel.com, sem mudar nenhuma configuração.
+no iphone, abra o link no safari e use **compartilhar → adicionar à tela de início** para abrir como app.
+
 ## modo local × nuvem
 
 - **sem configuração**, o app roda em **modo local**: os dados ficam só no aparelho/navegador.
