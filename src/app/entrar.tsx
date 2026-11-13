@@ -1,12 +1,11 @@
 import { useState } from 'react';
 import { StyleSheet } from 'react-native';
 import { Button, Card, FadeIn, Logo, Pressable, Screen, Segmented, Text, TextField, useFeedback } from '../components';
-import { friendlyAuthError, useAuth } from '../data/AuthProvider';
+import { useAuth } from '../data/AuthProvider';
+import { describeAuthError, validateEmail, type AuthField } from '../domain/auth';
 import { colors, space } from '../theme';
 
 type Mode = 'entrar' | 'criar';
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function Entrar() {
   const auth = useAuth();
@@ -15,16 +14,16 @@ export default function Entrar() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [emailError, setEmailError] = useState<string | null>(null);
+  // cada erro aparece embaixo do campo a que se refere; o resto, acima do botão.
+  const [problem, setProblem] = useState<{ field: AuthField; message: string } | null>(null);
   const [sent, setSent] = useState<string | null>(null);
+  const errorFor = (field: AuthField) => (problem?.field === field ? problem.message : null);
 
   const submit = async () => {
-    setError(null);
-    setEmailError(null);
-    const e = email.trim().toLowerCase();
-    if (!EMAIL_RE.test(e)) return setEmailError('esse e-mail não parece certo.');
-    if (password.length < 6) return setError('a senha precisa ter pelo menos 6 caracteres.');
+    setProblem(null);
+    const { email: e, problem: emailProblem } = validateEmail(email);
+    if (emailProblem) return setProblem({ field: 'email', message: emailProblem });
+    if (password.length < 6) return setProblem({ field: 'senha', message: 'a senha precisa ter pelo menos 6 caracteres.' });
     setLoading(true);
     try {
       if (mode === 'entrar') {
@@ -34,20 +33,23 @@ export default function Entrar() {
         if (needsConfirmation) setSent(e);
       }
     } catch (err) {
-      setError(friendlyAuthError(err));
+      setProblem(describeAuthError(err));
     } finally {
       setLoading(false);
     }
   };
 
   const forgot = async () => {
-    const e = email.trim().toLowerCase();
-    if (!EMAIL_RE.test(e)) return setEmailError('digita seu e-mail aqui que a gente te manda o link.');
+    setProblem(null);
+    const { email: e, problem: emailProblem } = validateEmail(email);
+    if (emailProblem) {
+      return setProblem({ field: 'email', message: email.trim() ? emailProblem : 'digita seu e-mail aqui que a gente te manda o link.' });
+    }
     try {
       await auth.resetPassword(e);
       toast('enviamos um link para criar uma nova senha.');
     } catch (err) {
-      setError(friendlyAuthError(err));
+      setProblem(describeAuthError(err));
     }
   };
 
@@ -93,8 +95,7 @@ export default function Entrar() {
             value={mode}
             onChange={(m) => {
               setMode(m);
-              setError(null);
-              setEmailError(null);
+              setProblem(null);
             }}
             options={[
               { value: 'entrar', label: 'entrar' },
@@ -104,25 +105,36 @@ export default function Entrar() {
           <TextField
             label="e-mail"
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(t) => {
+              setEmail(t);
+              if (problem?.field === 'email') setProblem(null);
+            }}
             autoCapitalize="none"
             autoComplete="email"
             keyboardType="email-address"
             inputMode="email"
             placeholder="voce@email.com"
             textContentType="emailAddress"
-            error={emailError}
+            error={errorFor('email')}
           />
           <TextField
             label="senha"
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(t) => {
+              setPassword(t);
+              if (problem?.field === 'senha') setProblem(null);
+            }}
             secureTextEntry
             autoComplete={mode === 'entrar' ? 'current-password' : 'new-password'}
             placeholder="pelo menos 6 caracteres"
             onSubmitEditing={submit}
-            error={error}
+            error={errorFor('senha')}
           />
+          {errorFor('geral') ? (
+            <Text variant="small" color={colors.danger} center>
+              {errorFor('geral')}
+            </Text>
+          ) : null}
           <Button label={mode === 'entrar' ? 'entrar' : 'criar minha conta'} onPress={submit} loading={loading} />
           {mode === 'entrar' ? (
             <Pressable onPress={forgot} style={{ alignSelf: 'center' }} hitSlop={8}>
