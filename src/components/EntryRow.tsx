@@ -54,9 +54,11 @@ export function EntryRow({ item, onPress, hideDate, right }: Props) {
 
   const meta = item.metaOverride ?? [
     item.investmentId
-      ? isIncome
-        ? 'resgate · volta pra conta'
-        : 'guardado · não conta como gasto'
+      ? planned
+        ? 'guardar na caixinha · compromisso com você'
+        : isIncome
+          ? 'resgate · volta pra conta'
+          : 'guardado · não conta como gasto'
       : invoiceForecast
         ? 'fatura do cartão'
         : item.paysCardId

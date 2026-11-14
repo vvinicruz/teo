@@ -260,6 +260,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             recurrenceId: entry.recurrenceId,
             occurrenceDate: entry.originalDate,
             cardId: rec?.cardId ?? null,
+            investmentId: rec?.investmentId ?? null,
             createdAt: nowIso(),
           });
         }

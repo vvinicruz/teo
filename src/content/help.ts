@@ -141,7 +141,9 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary: 'seus sonhos, com começo, meio e fim.',
     paragraphs: [
       'crie uma meta (uma viagem, uma reserva, um celular novo), diga quanto quer juntar e, se quiser, até quando.',
-      'toque em "guardar" sempre que separar um dinheiro pra ela. o teo mostra o progresso e quanto guardar por mês pra chegar lá.',
+      'toque em "guardar" sempre que separar um dinheiro pra ela. o teo mostra o progresso, quando você chega lá no seu ritmo e quantos meses seguidos você está guardando.',
+      'com a meta ligada a uma caixinha, dá pra combinar "guardar todo mês": vira um compromisso com você mesmo no horizonte.',
+      'a cada 25% o teo comemora com você. e se a meta ficar umas semanas sem receber nada, ele lembra, com carinho.',
     ],
     action: { label: 'ver metas', href: '/metas' },
   },

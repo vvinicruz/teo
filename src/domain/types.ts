@@ -87,6 +87,8 @@ export interface Recurrence {
   skippedDates: ISODate[];
   /** cobrada no cartão de crédito (ex.: assinatura, compra parcelada). */
   cardId?: string | null;
+  /** "guardar todo mês": cada ocorrência leva dinheiro da conta para esta caixinha. */
+  investmentId?: string | null;
   createdAt: string;
 }
 
@@ -106,6 +108,11 @@ export interface Goal {
   deadline?: ISODate | null;
   /** quando a meta é guardada numa caixinha, o progresso acompanha o saldo dela. */
   investmentId?: string | null;
+  /** último marco comemorado (0, 25, 50, 75 ou 100). vazio = ainda não acompanhado. */
+  lastMilestone?: number | null;
+  /** metas sem caixinha: quando guardou pela última vez e em quais meses guardou. */
+  lastContributionAt?: string | null;
+  contributionMonths?: MonthKey[];
   createdAt: string;
 }
 

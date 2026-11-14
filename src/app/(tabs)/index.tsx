@@ -1,11 +1,13 @@
 import { router } from 'expo-router';
 import { Check, ChevronRight, Eye, EyeOff, LifeBuoy, SlidersHorizontal } from 'lucide-react-native';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import {
   Card,
   CategoryIcon,
   EmptyState,
+  GoalMoveSheet,
+  GoalNudgeCard,
   EntryRow,
   FadeIn,
   Icon,
@@ -34,7 +36,9 @@ import {
 } from '../../domain/finance';
 import { totalInvested } from '../../domain/investments';
 import { formatMoney } from '../../domain/money';
+import type { Goal } from '../../domain/types';
 import { useCategories } from '../../hooks/useCategories';
+import { useGoalNudge } from '../../hooks/useGoalNudge';
 import { openEntry } from '../../lib/navigation';
 import { useToday } from '../../hooks/useToday';
 import { colors, radius, space } from '../../theme';
@@ -87,6 +91,9 @@ export default function Inicio() {
   const { h, summary, allowance } = view;
   const name = data.settings.name;
   const hide = data.settings.hideValues;
+
+  const { nudge, dismiss } = useGoalNudge();
+  const [moving, setMoving] = useState<Goal | null>(null);
 
   const confirm = async (e: Entry) => {
     try {
@@ -228,6 +235,12 @@ export default function Inicio() {
         </Pressable>
       </FadeIn>
 
+      {nudge ? (
+        <View style={{ marginTop: space.sm }}>
+          <GoalNudgeCard goal={nudge.goal} days={nudge.days} onSave={() => setMoving(nudge.goal)} onDismiss={() => dismiss(nudge.goal.id)} />
+        </View>
+      ) : null}
+
       {view.overdue.length > 0 && (
         <Section title="para confirmar">
           <Card padded={false} style={styles.list}>
@@ -366,6 +379,7 @@ export default function Inicio() {
       <Text variant="small" color={colors.textFaint} center style={{ marginTop: space.md }}>
         previsão até {friendlyDate(lastDay(month), todayDate)} · {view.h.days.length} dias no horizonte
       </Text>
+      <GoalMoveSheet goal={moving} onClose={() => setMoving(null)} />
     </Screen>
   );
 }

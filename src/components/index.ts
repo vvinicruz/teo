@@ -26,3 +26,6 @@ export * from './TextField';
 export * from './LegalDocument';
 export * from './DestinationPicker';
 export * from './InvestmentMoveSheet';
+export * from './GoalCelebration';
+export * from './GoalMoveSheet';
+export * from './GoalNudgeCard';

@@ -1,95 +1,68 @@
 import { router } from 'expo-router';
-import { ChevronRight, Minus, Plus } from 'lucide-react-native';
+import { ChevronRight, Flame, Plus } from 'lucide-react-native';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import {
-  AmountInput,
   Button,
   Card,
   CategoryIcon,
   EmptyState,
   FadeIn,
+  GoalMoveSheet,
+  GoalNudgeCard,
   Icon,
-  InvestmentMoveSheet,
   IconButton,
   Mascot,
   Money,
   ProgressBar,
   Screen,
-  Segmented,
-  Sheet,
   Text,
-  useFeedback,
 } from '../../components';
 import { useData } from '../../data/DataProvider';
-import { daysInclusive, friendlyDate } from '../../domain/dates';
+import { monthName } from '../../domain/dates';
 import { goalProgress } from '../../domain/finance';
+import { goalForecast, goalStreak } from '../../domain/goals';
+import { investmentBalance, monthlyYield, totalInvested } from '../../domain/investments';
 import { formatMoney } from '../../domain/money';
-import { goalSaved, investmentBalance, monthlyYield, totalInvested } from '../../domain/investments';
-import type { Goal, Investment } from '../../domain/types';
+import type { Goal } from '../../domain/types';
+import { useGoalNudge } from '../../hooks/useGoalNudge';
 import { useIndexRates } from '../../hooks/useIndexRates';
 import { useToday } from '../../hooks/useToday';
-import { colors, space } from '../../theme';
-
-type Move = 'guardar' | 'retirar';
+import { colors, radius, space } from '../../theme';
 
 export default function Metas() {
-  const { data, updateGoal } = useData();
-  const { toast } = useFeedback();
+  const { data } = useData();
   const todayDate = useToday();
-  const [target, setTarget] = useState<Goal | null>(null);
-  const [move, setMove] = useState<Move>('guardar');
-  const [value, setValue] = useState(0);
-  const [saving, setSaving] = useState(false);
-
-  const [invMove, setInvMove] = useState<{ inv: Investment; move: Move; goalName: string } | null>(null);
   const rates = useIndexRates();
-  // metas ligadas a uma caixinha usam o saldo dela como "guardado".
+  const { nudge, dismiss } = useGoalNudge();
+  const [moving, setMoving] = useState<Goal | null>(null);
+  const hide = data.settings.hideValues;
+
   const goals = data.goals
-    .map((g) => ({ ...g, saved: goalSaved(data, g) }))
-    .sort((a, b) => goalProgress(b.saved, b.target) - goalProgress(a.saved, a.target));
+    .map((g) => {
+      const f = goalForecast(data, g, todayDate);
+      return { goal: g, f, progress: goalProgress(f.saved, g.target), streak: goalStreak(data, g, todayDate) };
+    })
+    .sort((a, b) => b.progress - a.progress);
+  const [featured, ...others] = goals;
+
   const investments = data.investments.filter((i) => !i.archived);
   const invested = totalInvested(data);
   const investedYield = rates
     ? investments.reduce((a, i) => a + (monthlyYield(investmentBalance(data, i), i, rates) ?? 0), 0)
     : 0;
-  const [featured, ...others] = goals;
 
-  const openMove = (g: Goal, m: Move = 'guardar') => {
-    const inv = g.investmentId ? data.investments.find((i) => i.id === g.investmentId) : undefined;
-    if (inv) {
-      setInvMove({ inv, move: m, goalName: g.name });
-      return;
+  // uma frase curta de ritmo para os cards.
+  const paceLine = ({ goal, f }: (typeof goals)[number]) => {
+    if (f.remaining === 0) return 'meta concluída!';
+    if (f.etaMonth) {
+      const when = monthName(f.etaMonth, f.etaMonth.slice(0, 4) !== todayDate.slice(0, 4));
+      return goal.deadline && f.onTrack === false ? `no seu ritmo, chega em ${when} (depois do prazo)` : `no seu ritmo, você chega lá em ${when}`;
     }
-    setTarget(g);
-    setMove(m);
-    setValue(0);
+    return hide ? 'guarde um pouquinho para começar' : `faltam ${formatMoney(f.remaining)}`;
   };
 
-  const saveMove = async () => {
-    if (!target || value <= 0) return;
-    const saved = move === 'guardar' ? target.saved + value : Math.max(0, target.saved - value);
-    setSaving(true);
-    try {
-      await updateGoal({ ...target, saved });
-      const done = saved >= target.target && target.saved < target.target;
-      toast(done ? 'meta concluída! que orgulho :)' : move === 'guardar' ? 'mais um passo! valor guardado.' : 'valor retirado da meta.');
-      setTarget(null);
-    } catch {
-      toast('não conseguimos salvar agora. tenta de novo?', 'erro');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const meta = (g: Goal) => {
-    if (g.saved >= g.target) return 'meta concluída!';
-    if (!g.deadline) return `faltam ${formatMoney(g.target - g.saved)}`;
-    const days = daysInclusive(todayDate, g.deadline) - 1;
-    if (days < 0) return `faltam ${formatMoney(g.target - g.saved)}`;
-    const months = Math.max(1, Math.ceil(days / 30));
-    return `guardando ${formatMoney(Math.ceil((g.target - g.saved) / months))} por mês, chega lá até ${friendlyDate(g.deadline, todayDate)}`;
-  };
+  const open = (g: Goal) => router.push({ pathname: '/objetivo', params: { id: g.id } });
 
   return (
     <Screen tabBarSpace>
@@ -97,6 +70,12 @@ export default function Metas() {
         <Text variant="title">metas</Text>
         <Button label="nova meta" icon={Plus} small onPress={() => router.push('/meta')} />
       </View>
+
+      {nudge ? (
+        <View style={{ marginBottom: space.lg }}>
+          <GoalNudgeCard goal={nudge.goal} days={nudge.days} onSave={() => setMoving(nudge.goal)} onDismiss={() => dismiss(nudge.goal.id)} />
+        </View>
+      ) : null}
 
       <Card tone="cream" onPress={() => router.push('/guardado')} style={styles.saved}>
         <CategoryIcon icon="reserva" size={44} tone="primary" />
@@ -107,7 +86,7 @@ export default function Metas() {
           {investments.length ? (
             <>
               <Money value={invested} variant="heading" />
-              {investedYield > 0 && !data.settings.hideValues ? (
+              {investedYield > 0 && !hide ? (
                 <Text variant="caption" color={colors.income}>
                   rende cerca de {formatMoney(investedYield)} por mês
                 </Text>
@@ -130,87 +109,85 @@ export default function Metas() {
       ) : (
         <>
           <FadeIn>
-            <Card style={styles.featured} onPress={() => router.push({ pathname: '/meta', params: { id: featured.id } })}>
-              {featured.saved >= featured.target ? <Mascot size={64} /> : <CategoryIcon icon={featured.icon} size={64} />}
+            <Card style={styles.featured} onPress={() => open(featured.goal)}>
+              {featured.f.remaining === 0 ? <Mascot size={64} /> : <CategoryIcon icon={featured.goal.icon} size={64} />}
               <Text variant="heading" center>
-                {featured.name}
+                {featured.goal.name}
               </Text>
               <Text color={colors.textSoft} center>
-                <Money value={featured.saved} variant="bodyStrong" color={colors.text} /> de {data.settings.hideValues ? 'R$ ••••' : formatMoney(featured.target)}
+                <Money value={featured.f.saved} variant="bodyStrong" color={colors.text} /> de{' '}
+                {hide ? 'R$ ••••' : formatMoney(featured.goal.target)}
               </Text>
               <View style={styles.progressRow}>
                 <View style={{ flex: 1 }}>
-                  <ProgressBar value={goalProgress(featured.saved, featured.target)} height={10} />
+                  <ProgressBar value={featured.progress} height={10} />
                 </View>
-                <Text variant="smallStrong">{Math.floor(goalProgress(featured.saved, featured.target) * 100)}%</Text>
+                <Text variant="smallStrong">{Math.floor(featured.progress * 100)}%</Text>
               </View>
               <Text variant="small" color={colors.textSoft} center>
-                {meta(featured)}
+                {paceLine(featured)}
               </Text>
-              <View style={styles.actions}>
-                <Button label="guardar" icon={Plus} small onPress={() => openMove(featured)} style={{ flex: 1 }} />
-                <Button label="retirar" icon={Minus} small variant="ghost" onPress={() => openMove(featured, 'retirar')} style={{ flex: 1 }} />
-              </View>
+              {featured.streak.months > 0 ? <StreakBadge months={featured.streak.months} /> : null}
+              {featured.f.remaining > 0 ? (
+                <Button label="guardar" icon={Plus} small onPress={() => setMoving(featured.goal)} style={{ alignSelf: 'stretch' }} />
+              ) : null}
             </Card>
           </FadeIn>
 
           {others.length ? (
             <View style={{ gap: space.sm, marginTop: space.xxl }}>
               <Text variant="heading">outras metas</Text>
-              {others.map((g) => (
-                <Card key={g.id} onPress={() => router.push({ pathname: '/meta', params: { id: g.id } })} style={styles.row}>
-                  <CategoryIcon icon={g.icon} size={44} />
+              {others.map((item) => (
+                <Card key={item.goal.id} onPress={() => open(item.goal)} style={styles.row}>
+                  <CategoryIcon icon={item.goal.icon} size={44} />
                   <View style={{ flex: 1, gap: 6 }}>
                     <View style={styles.rowHead}>
                       <Text variant="bodyStrong" numberOfLines={1} style={{ flex: 1 }}>
-                        {g.name}
+                        {item.goal.name}
                       </Text>
-                      <Text variant="smallStrong">{Math.floor(goalProgress(g.saved, g.target) * 100)}%</Text>
+                      {item.streak.months > 1 ? (
+                        <View style={styles.miniStreak}>
+                          <Icon as={Flame} size={12} color={colors.primary} />
+                          <Text variant="caption" color={colors.primary}>
+                            {item.streak.months}
+                          </Text>
+                        </View>
+                      ) : null}
+                      <Text variant="smallStrong">{Math.floor(item.progress * 100)}%</Text>
                     </View>
-                    <ProgressBar value={goalProgress(g.saved, g.target)} height={6} />
-                    <Text variant="small" color={colors.textSoft}>
-                      {data.settings.hideValues ? meta(g).replace(/R\$ [\d.,]+/g, 'R$ ••••') : `${formatMoney(g.saved)} de ${formatMoney(g.target)}`}
+                    <ProgressBar value={item.progress} height={6} />
+                    <Text variant="small" color={colors.textSoft} numberOfLines={1}>
+                      {paceLine(item)}
                     </Text>
                   </View>
-                  <IconButton icon={Plus} label={`guardar em ${g.name}`} onPress={() => openMove(g)} background={colors.cream} color={colors.primary} />
+                  {item.f.remaining > 0 ? (
+                    <IconButton icon={Plus} label={`guardar em ${item.goal.name}`} onPress={() => setMoving(item.goal)} background={colors.cream} color={colors.primary} />
+                  ) : null}
                 </Card>
               ))}
             </View>
           ) : null}
 
           <Text variant="small" color={colors.textFaint} center style={{ marginTop: space.xxl }}>
-            metas ligadas a uma caixinha acompanham o saldo dela. as outras só registram quanto você separou, sem mexer no seu saldo.
+            metas ligadas a uma caixinha acompanham o saldo dela. as outras só registram quanto você separou, sem mexer no
+            seu saldo.
           </Text>
         </>
       )}
 
-      <Sheet visible={!!target} onClose={() => setTarget(null)} title={target?.name}>
-        <View style={{ gap: space.lg }}>
-          <Segmented<Move>
-            value={move}
-            onChange={setMove}
-            options={[
-              { value: 'guardar', label: 'guardar' },
-              { value: 'retirar', label: 'retirar' },
-            ]}
-          />
-          <AmountInput value={value} onChange={setValue} autoFocus color={move === 'guardar' ? colors.primary : colors.text} />
-          {target ? (
-            <Text variant="small" color={colors.textSoft} center>
-              hoje na meta: {formatMoney(target.saved)}
-            </Text>
-          ) : null}
-          <Button label={move === 'guardar' ? 'guardar valor' : 'retirar valor'} onPress={saveMove} loading={saving} disabled={value <= 0} />
-        </View>
-      </Sheet>
-
-      <InvestmentMoveSheet
-        investment={invMove?.inv ?? null}
-        initial={invMove?.move === 'retirar' ? 'resgatar' : 'guardar'}
-        goalName={invMove?.goalName}
-        onClose={() => setInvMove(null)}
-      />
+      <GoalMoveSheet goal={moving} onClose={() => setMoving(null)} />
     </Screen>
+  );
+}
+
+function StreakBadge({ months }: { months: number }) {
+  return (
+    <View style={styles.streak}>
+      <Icon as={Flame} size={14} color={colors.primary} />
+      <Text variant="caption" color={colors.primary}>
+        {months === 1 ? '1 mês guardando' : `${months} meses seguidos guardando`}
+      </Text>
+    </View>
   );
 }
 
@@ -219,7 +196,16 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: space.lg, paddingBottom: space.xl },
   featured: { alignItems: 'center', gap: space.md, paddingVertical: space.xxl },
   progressRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, alignSelf: 'stretch', marginTop: space.sm },
-  actions: { flexDirection: 'row', gap: space.sm, alignSelf: 'stretch', marginTop: space.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.lg },
   rowHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  streak: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: space.md,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+    backgroundColor: colors.cream,
+  },
+  miniStreak: { flexDirection: 'row', alignItems: 'center', gap: 2 },
 });

@@ -9,7 +9,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Button, FeedbackProvider, Logo, Text } from '../components';
+import { Button, FeedbackProvider, GoalCelebration, Logo, Text } from '../components';
 import { AuthProvider, useAuth } from '../data/AuthProvider';
 import { DataProvider, useData } from '../data/DataProvider';
 import { colors, space } from '../theme';
@@ -81,6 +81,8 @@ function Gate() {
   const home = !signedIn ? '/entrar' : !onboarded ? '/boas-vindas' : '/';
 
   return (
+    <>
+    {onboarded ? <GoalCelebration /> : null}
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background }, animation: 'fade_from_bottom' }}>
       <Stack.Protected guard={!signedIn} redirectTo={home}>
         <Stack.Screen name="entrar" />
@@ -105,11 +107,13 @@ function Gate() {
         <Stack.Screen name="guardado" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="caixinha" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="caixinha-form" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="objetivo" options={{ animation: 'slide_from_right' }} />
       </Stack.Protected>
       {/* termos e privacidade ficam acessíveis sempre, inclusive antes do login. */}
       <Stack.Screen name="termos" options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="privacidade" options={{ animation: 'slide_from_right' }} />
     </Stack>
+    </>
   );
 }
 

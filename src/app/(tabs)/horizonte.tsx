@@ -267,8 +267,10 @@ function DayEntry({ entry }: { entry: Entry }) {
             : cardName
               ? `no cartão ${cardName} · vai para a fatura`
               : entry.investmentId
-                ? entry.kind === 'despesa'
-                  ? 'guardado na caixinha'
+                ? entry.source !== 'realizada'
+                  ? 'guardar na caixinha · previsto'
+                  : entry.kind === 'despesa'
+                    ? 'guardado na caixinha'
                   : 'resgatado da caixinha'
               : isInvoice
                 ? 'fatura prevista'

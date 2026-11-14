@@ -95,7 +95,7 @@ export default function Movimentacao() {
   const isInvoicePayment = !!existing?.paysCardId;
   // guardar/resgatar numa caixinha: também sem categoria nem cartão.
   const movedInvestment = existing?.investmentId ? data.investments.find((i) => i.id === existing.investmentId) : undefined;
-  const isSpecial = isInvoicePayment || !!existing?.investmentId;
+  const isSpecial = isInvoicePayment || !!existing?.investmentId || !!(fromPrediction && recurrence?.investmentId);
   const card = cardId ? data.cards.find((c) => c.id === cardId) : undefined;
   const hasCards = data.cards.some((c) => !c.archived) || !!cardId;
   const accent = isIncome ? colors.income : colors.text;
@@ -180,6 +180,7 @@ export default function Movimentacao() {
           recurrenceId: fromPrediction ? recurrence!.id : null,
           occurrenceDate: fromPrediction ? params.occurrenceDate! : null,
           cardId,
+          investmentId: fromPrediction ? (recurrence!.investmentId ?? null) : null,
         });
         toast(
           card

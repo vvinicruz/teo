@@ -163,6 +163,7 @@ function occurrenceEntries(
         recurrenceId: rec.id,
         installment: rec.occurrences ? `${occ.index}/${rec.occurrences}` : undefined,
         cardId: rec.cardId ?? undefined,
+        investmentId: rec.investmentId ?? undefined,
       });
     }
   }
