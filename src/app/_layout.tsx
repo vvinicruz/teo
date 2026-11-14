@@ -94,6 +94,9 @@ function Gate() {
         <Stack.Screen name="perfil" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="categorias" options={{ animation: 'slide_from_right' }} />
       </Stack.Protected>
+      {/* termos e privacidade ficam acessíveis sempre, inclusive antes do login. */}
+      <Stack.Screen name="termos" options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="privacidade" options={{ animation: 'slide_from_right' }} />
     </Stack>
   );
 }

@@ -23,3 +23,4 @@ export * from './Segmented';
 export * from './Sheet';
 export * from './Text';
 export * from './TextField';
+export * from './LegalDocument';

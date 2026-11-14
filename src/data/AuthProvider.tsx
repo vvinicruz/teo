@@ -15,6 +15,8 @@ interface AuthValue {
   signUp(email: string, password: string): Promise<{ needsConfirmation: boolean }>;
   resetPassword(email: string): Promise<void>;
   signOut(): Promise<void>;
+  /** apaga a conta e todos os dados na nuvem, de forma definitiva. */
+  deleteAccount(): Promise<void>;
 }
 
 const AuthContext = createContext<AuthValue | null>(null);
@@ -58,6 +60,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       async signOut() {
         if (isCloudConfigured) await getSupabase().auth.signOut();
+      },
+      async deleteAccount() {
+        if (!isCloudConfigured) return;
+        const sb = getSupabase();
+        const { error } = await sb.rpc('delete_my_account');
+        if (error) throw error;
+        // a conta já não existe no servidor: basta limpar a sessão deste aparelho.
+        await sb.auth.signOut({ scope: 'local' });
       },
     }),
     [session, status],

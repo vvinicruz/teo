@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet } from 'react-native';
 import { Button, Card, FadeIn, Logo, Pressable, Screen, Segmented, Text, TextField, useFeedback } from '../components';
@@ -148,6 +149,17 @@ export default function Entrar() {
 
       <Text variant="small" color={colors.textFaint} center style={{ marginTop: space.xl }}>
         seus dados ficam protegidos e só você tem acesso a eles.
+      </Text>
+      <Text variant="small" color={colors.textFaint} center style={{ marginTop: space.sm }}>
+        {mode === 'criar' ? 'ao criar sua conta, você concorda com os ' : 'veja os '}
+        <Text variant="smallStrong" color={colors.primary} onPress={() => router.push('/termos')} accessibilityRole="link">
+          termos de uso
+        </Text>
+        {' e a '}
+        <Text variant="smallStrong" color={colors.primary} onPress={() => router.push('/privacidade')} accessibilityRole="link">
+          política de privacidade
+        </Text>
+        .
       </Text>
     </Screen>
   );

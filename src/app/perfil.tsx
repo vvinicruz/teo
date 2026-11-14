@@ -4,8 +4,11 @@ import {
   Cloud,
   CloudOff,
   Eye,
+  FileText,
   LogOut,
   PiggyBank,
+  RotateCcw,
+  ShieldCheck,
   Repeat,
   SlidersHorizontal,
   Tags,
@@ -48,6 +51,9 @@ export default function Perfil() {
   const [amount, setAmount] = useState(0);
   const [negative, setNegative] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteText, setDeleteText] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   const open = (e: Editing) => {
     setEditing(e);
@@ -81,8 +87,8 @@ export default function Perfil() {
 
   const wipe = async () => {
     const ok = await confirm({
-      title: 'apagar todos os seus dados?',
-      message: 'movimentações, contas fixas, metas e planejamento serão apagados para sempre. você volta para o começo.',
+      title: 'começar do zero?',
+      message: 'movimentações, contas fixas, metas e planejamento serão apagados para sempre. sua conta continua, e você volta para o começo.',
       confirmLabel: 'apagar tudo',
       danger: true,
     });
@@ -92,6 +98,20 @@ export default function Perfil() {
       toast('tudo apagado. um novo começo!', 'info');
     } catch {
       toast('não conseguimos apagar agora. tenta de novo?', 'erro');
+    }
+  };
+
+  // apagar a conta é definitivo: pedimos para digitar "apagar" antes.
+  const deleteAccount = async () => {
+    if (deleteText.trim().toLowerCase() !== 'apagar') return;
+    setDeleting(true);
+    try {
+      await auth.deleteAccount();
+      setDeleteOpen(false);
+      toast('sua conta foi apagada. obrigado por ter usado o teo.', 'info');
+    } catch {
+      setDeleting(false);
+      toast('não conseguimos apagar sua conta agora. tenta de novo em instantes?', 'erro');
     }
   };
 
@@ -154,7 +174,25 @@ export default function Perfil() {
             <Item icon={LogOut} label="sair" onPress={signOut} />
           </>
         )}
-        <Item icon={Trash2} label="apagar todos os meus dados" danger onPress={wipe} last />
+        <Item icon={RotateCcw} label="começar do zero" danger onPress={wipe} last={auth.mode === 'local'} />
+        {auth.mode === 'cloud' ? (
+          <Item
+            icon={Trash2}
+            label="apagar minha conta"
+            danger
+            last
+            onPress={() => {
+              setDeleteText('');
+              setDeleting(false);
+              setDeleteOpen(true);
+            }}
+          />
+        ) : null}
+      </Group>
+
+      <Group title="sobre">
+        <Item icon={FileText} label="termos de uso" onPress={() => router.push('/termos')} />
+        <Item icon={ShieldCheck} label="política de privacidade" onPress={() => router.push('/privacidade')} last />
       </Group>
 
       <View style={styles.footer}>
@@ -163,6 +201,31 @@ export default function Perfil() {
           tudo em ordem · usando desde {friendlyDate(s.initialBalanceDate, today())}
         </Text>
       </View>
+
+      <Sheet visible={deleteOpen} onClose={() => !deleting && setDeleteOpen(false)} title="apagar sua conta?">
+        <View style={{ gap: space.lg }}>
+          <Text color={colors.textSoft}>
+            sua conta e todos os seus dados (movimentações, contas fixas, planejamento e metas) serão apagados para sempre.
+            não dá para desfazer.
+          </Text>
+          <TextField
+            label='para confirmar, digite "apagar"'
+            value={deleteText}
+            onChangeText={setDeleteText}
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder="apagar"
+          />
+          <Button
+            label="apagar minha conta"
+            variant="danger"
+            onPress={deleteAccount}
+            loading={deleting}
+            disabled={deleteText.trim().toLowerCase() !== 'apagar'}
+          />
+          <Button label="cancelar" variant="ghost" onPress={() => setDeleteOpen(false)} disabled={deleting} />
+        </View>
+      </Sheet>
 
       <Sheet
         visible={!!editing}
