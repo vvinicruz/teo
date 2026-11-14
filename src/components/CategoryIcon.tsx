@@ -5,6 +5,7 @@ import {
   Bus,
   Car,
   Coins,
+  CreditCard,
   Dumbbell,
   Ellipsis,
   Fuel,
@@ -63,6 +64,7 @@ export const CATEGORY_ICONS: Record<string, LucideIcon> = {
   investimentos: Landmark,
   reserva: PiggyBank,
   meta: Target,
+  cartao: CreditCard,
   outros: Ellipsis,
 };
 

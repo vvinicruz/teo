@@ -19,7 +19,9 @@ export function createLocalRepository(): Repository {
   return {
     async load() {
       const raw = await AsyncStorage.getItem(KEY);
-      cache = raw ? (JSON.parse(raw) as Snapshot) : null;
+      // dados salvos por versões antigas do app podem não ter coleções novas.
+      const parsed = raw ? (JSON.parse(raw) as Partial<Snapshot>) : null;
+      cache = parsed ? ({ ...parsed, cards: parsed.cards ?? [] } as Snapshot) : null;
       return cache;
     },
     async init(snapshot) {
@@ -37,6 +39,13 @@ export function createLocalRepository(): Repository {
       const exists = list.some((x) => x.id === item.id);
       const next = exists ? list.map((x) => (x.id === item.id ? item : x)) : [...list, item];
       cache = { ...cache, [collection]: next };
+      await persist();
+    },
+    async upsertMany<K extends Collection>(collection: K, items: CollectionMap[K][]) {
+      if (!cache) throw new Error('dados não carregados');
+      const byId = new Map((cache[collection] as unknown as { id: string }[]).map((x) => [x.id, x]));
+      for (const item of items) byId.set(item.id, item);
+      cache = { ...cache, [collection]: [...byId.values()] };
       await persist();
     },
     async remove(collection, id) {

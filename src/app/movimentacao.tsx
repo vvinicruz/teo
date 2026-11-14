@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { CalendarDays, Repeat, SkipForward, Trash2, X } from 'lucide-react-native';
+import { CalendarDays, CreditCard, FileUp, Repeat, SkipForward, Trash2, X } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import {
@@ -9,6 +9,7 @@ import {
   CategoryPicker,
   Chip,
   DatePickerSheet,
+  DestinationPicker,
   Icon,
   IconButton,
   Pressable,
@@ -19,7 +20,8 @@ import {
   useFeedback,
 } from '../components';
 import { useData } from '../data/DataProvider';
-import { addDays, friendlyDate, monthOf, parseISODate } from '../domain/dates';
+import { addDays, friendlyDate, monthOf, parseISODate, shortDate } from '../domain/dates';
+import { invoiceOf } from '../domain/finance';
 import { PAYMENT_METHODS, type Kind, type PaymentMethod, type Status } from '../domain/types';
 import { useCategories } from '../hooks/useCategories';
 import { useToday } from '../hooks/useToday';
@@ -31,6 +33,8 @@ type Params = {
   kind?: Kind;
   recurrenceId?: string;
   occurrenceDate?: string;
+  /** já abre como compra num cartão. */
+  cardId?: string;
 };
 
 type RepeatMode = 'nao' | 'sempre' | 'parcelas';
@@ -65,8 +69,11 @@ export default function Movimentacao() {
   const [status, setStatus] = useState<Status>(
     existing?.status ?? (initialDate > todayDate ? 'pendente' : 'realizada'),
   );
+  const [cardId, setCardId] = useState<string | null>(
+    existing ? (existing.cardId ?? null) : fromPrediction ? (recurrence!.cardId ?? null) : (params.cardId ?? null),
+  );
   const [payment, setPayment] = useState<PaymentMethod | null>(
-    existing?.paymentMethod ?? (fromPrediction ? recurrence!.paymentMethod : null),
+    existing?.paymentMethod ?? (fromPrediction ? recurrence!.paymentMethod : params.cardId ? 'credito' : null),
   );
   const [repeat, setRepeat] = useState<RepeatMode>('nao');
   const [installments, setInstallments] = useState('2');
@@ -83,6 +90,11 @@ export default function Movimentacao() {
 
   const future = date > todayDate;
   const isIncome = kind === 'receita';
+  // pagamento de fatura: um lançamento especial, sem categoria nem cartão.
+  const paidCard = existing?.paysCardId ? data.cards.find((c) => c.id === existing.paysCardId) : undefined;
+  const isInvoicePayment = !!existing?.paysCardId;
+  const card = cardId ? data.cards.find((c) => c.id === cardId) : undefined;
+  const hasCards = data.cards.some((c) => !c.archived) || !!cardId;
   const accent = isIncome ? colors.income : colors.text;
 
   const title = existing ? 'editar movimentação' : fromPrediction ? 'confirmar previsão' : 'nova movimentação';
@@ -103,7 +115,8 @@ export default function Movimentacao() {
     setError(null);
     if (amount <= 0) return setError('qual é o valor?');
     const finalDescription = description.trim() || get(categoryId)?.name || (isIncome ? 'receita' : 'despesa');
-    const finalStatus: Status = future ? 'pendente' : status;
+    // compra no cartão já aconteceu: quem "paga" depois é a fatura.
+    const finalStatus: Status = cardId ? 'realizada' : future ? 'pendente' : status;
     let parcelas: number | null = null;
     if (repeat === 'parcelas') {
       parcelas = parseInt(installments, 10);
@@ -121,6 +134,7 @@ export default function Movimentacao() {
           date,
           status: finalStatus,
           paymentMethod: payment,
+          cardId: isInvoicePayment ? null : cardId,
         });
         toast('prontinho, alteração salva.');
       } else if (repeat !== 'nao') {
@@ -134,6 +148,7 @@ export default function Movimentacao() {
           dayOfMonth: parseISODate(date).day,
           startMonth: monthOf(date),
           occurrences: parcelas,
+          cardId,
         });
         if (finalStatus === 'realizada') {
           await addTransaction({
@@ -146,6 +161,7 @@ export default function Movimentacao() {
             paymentMethod: payment,
             recurrenceId: rec.id,
             occurrenceDate: date,
+            cardId,
           });
         }
         toast(repeat === 'sempre' ? 'prontinho! vai se repetir todo mês.' : `prontinho! ${parcelas} parcelas no horizonte.`);
@@ -160,9 +176,12 @@ export default function Movimentacao() {
           paymentMethod: payment,
           recurrenceId: fromPrediction ? recurrence!.id : null,
           occurrenceDate: fromPrediction ? params.occurrenceDate! : null,
+          cardId,
         });
         toast(
-          finalStatus === 'pendente'
+          card
+            ? `anotado! entra na fatura do ${card.name}.`
+            : finalStatus === 'pendente'
             ? 'anotado! vai aparecer no seu horizonte.'
             : isIncome
               ? 'oba! receita registrada.'
@@ -233,6 +252,29 @@ export default function Movimentacao() {
         />
       ) : null}
 
+      {!existing && !fromPrediction ? (
+        <Pressable onPress={() => router.replace({ pathname: '/importar', params: cardId ? { cardId } : {} })} style={styles.importLink}>
+          <Icon as={FileUp} size={16} color={colors.primary} />
+          <Text variant="small" color={colors.textSoft}>
+            tem o extrato do banco?{' '}
+            <Text variant="smallStrong" color={colors.primary}>
+              importar arquivo
+            </Text>
+          </Text>
+        </Pressable>
+      ) : null}
+
+      {paidCard ? (
+        <View style={styles.recInfo}>
+          <Icon as={CreditCard} size={18} color={colors.primary} />
+          <Text variant="small" color={colors.textSoft} style={{ flex: 1 }}>
+            pagamento da fatura do <Text variant="smallStrong">{paidCard.name}</Text>
+            {existing?.invoiceDate ? ` que vence em ${shortDate(existing.invoiceDate)}` : ''}. apagar este lançamento faz a
+            fatura voltar a ficar em aberto.
+          </Text>
+        </View>
+      ) : null}
+
       {recurrence ? (
         <Pressable onPress={() => router.push({ pathname: '/recorrencia', params: { id: recurrence.id } })} style={styles.recInfo}>
           <Icon as={Repeat} size={18} color={colors.primary} />
@@ -266,12 +308,37 @@ export default function Movimentacao() {
           returnKeyType="done"
         />
 
-        <View style={styles.block}>
-          <Text variant="smallStrong" color={colors.textSoft}>
-            categoria
-          </Text>
-          <CategoryPicker categories={categories} value={categoryId} onChange={setCategoryId} income={isIncome} />
-        </View>
+        {hasCards && !isInvoicePayment ? (
+          <View style={styles.block}>
+            <Text variant="smallStrong" color={colors.textSoft}>
+              {isIncome ? 'onde entrou?' : 'onde foi?'}
+            </Text>
+            <DestinationPicker
+              value={cardId}
+              onChange={(id) => {
+                setCardId(id);
+                if (id && !payment) setPayment('credito');
+                if (!id && payment === 'credito') setPayment(null);
+              }}
+            />
+            {card ? (
+              <Text variant="small" color={colors.textFaint}>
+                {isIncome
+                  ? 'estorno no cartão: abate da fatura.'
+                  : `não sai do saldo agora: entra na fatura do ${card.name} que vence em ${shortDate(invoiceOf(card, date).dueDate)}.`}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
+
+        {!isInvoicePayment ? (
+          <View style={styles.block}>
+            <Text variant="smallStrong" color={colors.textSoft}>
+              categoria
+            </Text>
+            <CategoryPicker categories={categories} value={categoryId} onChange={setCategoryId} income={isIncome} />
+          </View>
+        ) : null}
 
         <View style={styles.block}>
           <Text variant="smallStrong" color={colors.textSoft}>
@@ -289,6 +356,7 @@ export default function Movimentacao() {
           </View>
         </View>
 
+        {card || isInvoicePayment ? null : (
         <View style={styles.block}>
           <Text variant="smallStrong" color={colors.textSoft}>
             {isIncome ? 'já recebeu?' : 'já pagou?'}
@@ -304,6 +372,7 @@ export default function Movimentacao() {
             </View>
           )}
         </View>
+        )}
 
         <View style={styles.block}>
           <Text variant="smallStrong" color={colors.textSoft}>
@@ -367,6 +436,7 @@ export default function Movimentacao() {
 const styles = StyleSheet.create({
   block: { gap: space.sm },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  importLink: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', marginTop: space.md },
   recInfo: {
     flexDirection: 'row',
     alignItems: 'center',

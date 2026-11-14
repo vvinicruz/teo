@@ -24,3 +24,4 @@ export * from './Sheet';
 export * from './Text';
 export * from './TextField';
 export * from './LegalDocument';
+export * from './DestinationPicker';

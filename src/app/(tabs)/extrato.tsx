@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { ChevronLeft, ChevronRight, Search, SlidersHorizontal, X } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, CreditCard, FileUp, Search, SlidersHorizontal, Wallet, X } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 import {
@@ -42,16 +42,21 @@ export default function Extrato() {
   const [kind, setKind] = useState<KindFilter>('tudo');
   const [status, setStatus] = useState<StatusFilter>('tudo');
   const [categoryId, setCategoryId] = useState<string | null>(null);
+  /** 'tudo', 'conta' ou o id de um cartão. */
+  const [where, setWhere] = useState<string>('tudo');
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   const searching = query.trim().length > 0;
-  const activeFilters = (kind !== 'tudo' ? 1 : 0) + (status !== 'tudo' ? 1 : 0) + (categoryId ? 1 : 0);
+  const activeFilters =
+    (kind !== 'tudo' ? 1 : 0) + (status !== 'tudo' ? 1 : 0) + (categoryId ? 1 : 0) + (where !== 'tudo' ? 1 : 0);
 
   const { groups, income, expense, count } = useMemo(() => {
     const q = normalize(query.trim());
     const list = data.transactions.filter((t) => {
       if (!searching && monthOf(t.date) !== month) return false;
       if (kind !== 'tudo' && t.kind !== kind) return false;
+      if (where === 'conta' && t.cardId) return false;
+      if (where !== 'tudo' && where !== 'conta' && t.cardId !== where) return false;
       if (status !== 'tudo' && t.status !== status) return false;
       if (categoryId && t.categoryId !== categoryId) return false;
       if (q) {
@@ -67,21 +72,24 @@ export default function Extrato() {
     return {
       groups: [...map.entries()],
       income: realized.filter((t) => t.kind === 'receita').reduce((a, t) => a + t.amount, 0),
-      expense: realized.filter((t) => t.kind === 'despesa').reduce((a, t) => a + t.amount, 0),
+      // gastos = o que foi consumido (conta e cartão). o pagamento da fatura não conta de novo.
+      expense: realized.filter((t) => t.kind === 'despesa' && !t.paysCardId).reduce((a, t) => a + t.amount, 0),
       count: list.length,
     };
-  }, [data.transactions, month, query, searching, kind, status, categoryId, get]);
+  }, [data.transactions, month, query, searching, kind, status, categoryId, where, get]);
 
   const clearFilters = () => {
     setKind('tudo');
     setStatus('tudo');
     setCategoryId(null);
+    setWhere('tudo');
   };
 
   return (
     <Screen tabBarSpace>
       <View style={styles.titleRow}>
         <Text variant="title">extrato</Text>
+        <Button label="importar" icon={FileUp} variant="secondary" small onPress={() => router.push('/importar')} />
       </View>
 
       <View style={styles.searchRow}>
@@ -135,7 +143,7 @@ export default function Extrato() {
         </View>
         <View style={{ flex: 1 }}>
           <Text variant="caption" color={colors.textSoft}>
-            saídas
+            gastos
           </Text>
           <Money value={expense} variant="bodyStrong" color={colors.primary} />
         </View>
@@ -169,7 +177,7 @@ export default function Extrato() {
       ) : (
         groups.map(([date, items]) => {
           const dayTotal = items
-            .filter((t) => t.status === 'realizada')
+            .filter((t) => t.status === 'realizada' && !t.paysCardId)
             .reduce((a, t) => a + (t.kind === 'receita' ? t.amount : -t.amount), 0);
           return (
             <View key={date} style={styles.group}>
@@ -177,7 +185,7 @@ export default function Extrato() {
                 <Text variant="smallStrong" color={colors.textSoft}>
                   {friendlyDate(date, todayDate)} · {weekday(date)}
                 </Text>
-                {items.some((t) => t.status === 'realizada') ? (
+                {items.some((t) => t.status === 'realizada' && !t.paysCardId) ? (
                   <Money value={dayTotal} sign variant="small" color={colors.textFaint} />
                 ) : null}
               </View>
@@ -208,6 +216,20 @@ export default function Extrato() {
               ))}
             </View>
           </View>
+          {data.cards.length ? (
+            <View style={styles.filterGroup}>
+              <Text variant="smallStrong" color={colors.textSoft}>
+                onde
+              </Text>
+              <View style={styles.chips}>
+                <Chip label="tudo" selected={where === 'tudo'} onPress={() => setWhere('tudo')} />
+                <Chip label="conta" icon={Wallet} selected={where === 'conta'} onPress={() => setWhere('conta')} />
+                {data.cards.map((c) => (
+                  <Chip key={c.id} label={c.name} icon={CreditCard} selected={where === c.id} onPress={() => setWhere(c.id)} />
+                ))}
+              </View>
+            </View>
+          ) : null}
           <View style={styles.filterGroup}>
             <Text variant="smallStrong" color={colors.textSoft}>
               situação
@@ -248,7 +270,7 @@ export default function Extrato() {
 }
 
 const styles = StyleSheet.create({
-  titleRow: { paddingTop: space.lg, paddingBottom: space.lg },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: space.lg, paddingBottom: space.lg },
   searchRow: { flexDirection: 'row', gap: space.sm },
   search: {
     flex: 1,

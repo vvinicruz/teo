@@ -1,4 +1,4 @@
-import type { Budget, Category, Goal, Recurrence, Settings, Snapshot, Transaction } from '../domain/types';
+import type { Budget, Card, Category, Goal, Recurrence, Settings, Snapshot, Transaction } from '../domain/types';
 
 export interface CollectionMap {
   categories: Category;
@@ -6,6 +6,7 @@ export interface CollectionMap {
   recurrences: Recurrence;
   budgets: Budget;
   goals: Goal;
+  cards: Card;
 }
 export type Collection = keyof CollectionMap;
 
@@ -20,6 +21,8 @@ export interface Repository {
   init(snapshot: Snapshot): Promise<void>;
   saveSettings(settings: Settings): Promise<void>;
   upsert<K extends Collection>(collection: K, item: CollectionMap[K]): Promise<void>;
+  /** grava vários itens de uma vez (ex.: importação de extrato). */
+  upsertMany<K extends Collection>(collection: K, items: CollectionMap[K][]): Promise<void>;
   remove(collection: Collection, id: string): Promise<void>;
   /** apaga todos os dados do usuário. */
   wipe(): Promise<void>;

@@ -247,12 +247,16 @@ function DayRow({
 
 function DayEntry({ entry }: { entry: Entry }) {
   const { get } = useCategories();
+  const { data } = useData();
   const cat = get(entry.categoryId);
   const income = entry.kind === 'receita';
   const planned = entry.source !== 'realizada';
+  const isInvoice = !!entry.invoiceDate;
+  // compra no cartão aparece no dia da compra, mas não mexe no saldo: ela vai para a fatura.
+  const cardName = entry.cardId && !isInvoice ? data.cards.find((c) => c.id === entry.cardId)?.name : null;
   return (
     <Pressable onPress={() => openEntry(entry)} style={styles.entryLine} scaleTo={0.98} accessibilityRole="button">
-      <CategoryIcon icon={cat?.icon} size={28} tone={income ? 'income' : planned ? 'muted' : 'cream'} />
+      <CategoryIcon icon={isInvoice ? 'cartao' : cat?.icon} size={28} tone={income ? 'income' : planned || cardName ? 'muted' : 'cream'} />
       <View style={{ flex: 1 }}>
         <Text variant="smallStrong" numberOfLines={1}>
           {entry.description}
@@ -260,20 +264,24 @@ function DayEntry({ entry }: { entry: Entry }) {
         <Text variant="caption" color={entry.overdue ? colors.attention : colors.textFaint}>
           {entry.overdue
             ? `a confirmar · era dia ${parseISODate(entry.originalDate).day}`
-            : entry.source === 'realizada'
-              ? 'realizada'
-              : entry.source === 'pendente'
-                ? 'pendente'
-                : entry.installment
-                  ? `prevista · ${entry.installment}`
-                  : 'prevista'}
+            : cardName
+              ? `no cartão ${cardName} · vai para a fatura`
+              : isInvoice
+                ? 'fatura prevista'
+                : entry.source === 'realizada'
+                  ? 'realizada'
+                  : entry.source === 'pendente'
+                    ? 'pendente'
+                    : entry.installment
+                      ? `prevista · ${entry.installment}`
+                      : 'prevista'}
         </Text>
       </View>
       <Money
         value={income ? entry.amount : -entry.amount}
         sign={income}
         variant="smallStrong"
-        color={income ? colors.income : planned ? colors.textSoft : colors.text}
+        color={income ? colors.income : planned || cardName ? colors.textSoft : colors.text}
       />
     </Pressable>
   );

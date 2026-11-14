@@ -49,6 +49,19 @@ export interface Transaction {
    */
   recurrenceId?: string | null;
   occurrenceDate?: ISODate | null;
+  /**
+   * compra no cartão de crédito: não sai do saldo na hora, entra na fatura do cartão.
+   * vazio = movimentação da conta (dinheiro, pix, débito...).
+   */
+  cardId?: string | null;
+  /**
+   * pagamento de fatura: lançamento da conta que quita a fatura do cartão
+   * `paysCardId` com vencimento em `invoiceDate`. substitui a previsão da fatura.
+   */
+  paysCardId?: string | null;
+  invoiceDate?: ISODate | null;
+  /** identificador vindo do extrato importado, para não importar duas vezes. */
+  externalId?: string | null;
   createdAt: string;
 }
 
@@ -67,6 +80,8 @@ export interface Recurrence {
   occurrences?: number | null;
   /** datas de ocorrências que o usuário pulou. */
   skippedDates: ISODate[];
+  /** cobrada no cartão de crédito (ex.: assinatura, compra parcelada). */
+  cardId?: string | null;
   createdAt: string;
 }
 
@@ -98,6 +113,20 @@ export interface Settings {
   onboarded: boolean;
 }
 
+/** cartão de crédito. as compras entram na fatura, que vence em `dueDay`. */
+export interface Card {
+  id: string;
+  name: string;
+  /** dia em que a fatura fecha. compras depois desse dia vão para a fatura seguinte. */
+  closingDay: number;
+  /** dia em que a fatura vence (quando o dinheiro sai da conta). */
+  dueDay: number;
+  /** limite do cartão (opcional). */
+  creditLimit: Cents | null;
+  archived?: boolean;
+  createdAt: string;
+}
+
 export interface Snapshot {
   settings: Settings;
   categories: Category[];
@@ -105,4 +134,5 @@ export interface Snapshot {
   recurrences: Recurrence[];
   budgets: Budget[];
   goals: Goal[];
+  cards: Card[];
 }

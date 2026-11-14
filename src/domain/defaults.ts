@@ -35,5 +35,6 @@ export function emptySnapshot(newId: () => string): Snapshot {
     recurrences: [],
     budgets: [],
     goals: [],
+    cards: [],
   };
 }

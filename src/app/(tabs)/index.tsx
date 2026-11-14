@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import {
   Card,
+  CategoryIcon,
   EmptyState,
   EntryRow,
   FadeIn,
@@ -19,10 +20,13 @@ import {
 } from '../../components';
 import { useAuth } from '../../data/AuthProvider';
 import { useData } from '../../data/DataProvider';
-import { addDays, dayAndMonth, friendlyDate, lastDay, monthOf, weekday } from '../../domain/dates';
+import { addDays, addMonths, dayAndMonth, friendlyDate, lastDay, monthOf, shortDate, weekday } from '../../domain/dates';
 import {
   budgetProgress,
+  cardInvoices,
   dailyAllowance,
+  invoiceByDueDate,
+  invoiceOf,
   horizon,
   monthSummary,
   upcomingEntries,
@@ -62,6 +66,15 @@ export default function Inicio() {
       budgets: budgetProgress(data, month, todayDate)
         .sort((a, b) => b.ratio - a.ratio)
         .slice(0, 3),
+      // fatura em destaque de cada cartão: a próxima que ainda não foi paga.
+      cards: data.cards
+        .filter((c) => !c.archived)
+        .map((card) => {
+          const unpaid = cardInvoices(data, card, lastDay(addMonths(month, 2)), todayDate).filter(
+            (i) => !i.payment && i.dueDate >= todayDate,
+          );
+          return { card, invoice: unpaid[0] ?? invoiceByDueDate(data, card, invoiceOf(card, todayDate).dueDate, todayDate) };
+        }),
       recent: [...data.transactions]
         .filter((t) => t.status === 'realizada')
         .sort((a, b) => (a.date === b.date ? b.createdAt.localeCompare(a.createdAt) : a.date < b.date ? 1 : -1))
@@ -241,6 +254,31 @@ export default function Inicio() {
         )}
       </Section>
 
+      {view.cards.length ? (
+        <Section title="cartões" actionLabel="ver cartões" onAction={() => router.push('/cartoes')}>
+          <Card padded={false} style={styles.list}>
+            {view.cards.map(({ card, invoice }, i) => (
+              <Pressable
+                key={card.id}
+                onPress={() => router.push({ pathname: '/cartao', params: { id: card.id } })}
+                style={[styles.cardRow, i < view.cards.length - 1 && styles.cardRowSep]}
+                accessibilityRole="button"
+                scaleTo={0.99}
+              >
+                <CategoryIcon icon="cartao" size={42} />
+                <View style={{ flex: 1 }}>
+                  <Text variant="bodyStrong">{card.name}</Text>
+                  <Text variant="small" color={colors.textSoft}>
+                    fatura {invoice.status === 'aberta' ? 'aberta' : 'fechada'} · vence {shortDate(invoice.dueDate)}
+                  </Text>
+                </View>
+                <Money value={invoice.total} variant="bodyStrong" />
+              </Pressable>
+            ))}
+          </Card>
+        </Section>
+      ) : null}
+
       <Section title="planejamento do mês" actionLabel={view.budgets.length ? 'ajustar' : undefined} onAction={() => router.push('/planejamento')}>
         {view.budgets.length ? (
           <Card style={{ gap: space.lg }} onPress={() => router.push('/planejamento')}>
@@ -331,5 +369,7 @@ const styles = StyleSheet.create({
   mood: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.lg, paddingHorizontal: space.xs },
   list: { paddingHorizontal: space.lg, paddingVertical: space.xs },
   budgetHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
+  cardRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
+  cardRowSep: { borderBottomWidth: 1, borderBottomColor: colors.line },
   planCta: { flexDirection: 'row', alignItems: 'center', gap: space.md },
 });

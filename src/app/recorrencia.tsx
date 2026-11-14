@@ -6,6 +6,7 @@ import {
   AmountInput,
   Button,
   CategoryPicker,
+  DestinationPicker,
   Chip,
   IconButton,
   Screen,
@@ -39,6 +40,8 @@ export default function RecorrenciaForm() {
   const [limited, setLimited] = useState(!!existing?.occurrences);
   const [count, setCount] = useState(String(existing?.occurrences ?? 12));
   const [payment, setPayment] = useState<PaymentMethod | null>(existing?.paymentMethod ?? null);
+  const [cardId, setCardId] = useState<string | null>(existing?.cardId ?? null);
+  const hasCards = data.cards.some((c) => !c.archived) || !!cardId;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -72,6 +75,7 @@ export default function RecorrenciaForm() {
       dayOfMonth: d,
       startMonth,
       occurrences: limited ? n : null,
+      cardId,
     };
     try {
       if (existing) await updateRecurrence({ ...existing, ...payload });
@@ -159,6 +163,26 @@ export default function RecorrenciaForm() {
           </Text>
           <CategoryPicker categories={forKind(kind)} value={categoryId} onChange={setCategoryId} income={kind === 'receita'} />
         </View>
+
+        {hasCards ? (
+          <View style={styles.block}>
+            <Text variant="smallStrong" color={colors.textSoft}>
+              {kind === 'receita' ? 'onde entra?' : 'onde é cobrada?'}
+            </Text>
+            <DestinationPicker
+              value={cardId}
+              onChange={(id) => {
+                setCardId(id);
+                if (id && !payment) setPayment('credito');
+              }}
+            />
+            {cardId ? (
+              <Text variant="small" color={colors.textFaint}>
+                cobrada no cartão: entra na fatura, não sai do saldo direto.
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
 
         <TextField
           label="todo dia"

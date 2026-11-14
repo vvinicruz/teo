@@ -8,6 +8,7 @@ const TABLES: Record<Collection, string> = {
   recurrences: 'recurrences',
   budgets: 'budgets',
   goals: 'goals',
+  cards: 'cards',
 };
 
 const toSnake = (k: string) => k.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
@@ -48,7 +49,7 @@ export function createSupabaseRepository(sb: SupabaseClient, userId: string): Re
         await sb.from('profiles').select('*').eq('user_id', userId).maybeSingle(),
       ) as Record<string, unknown> | null;
       if (!profile) return null;
-      const [categories, transactions, recurrences, budgets, goals] = await Promise.all(
+      const [categories, transactions, recurrences, budgets, goals, cards] = await Promise.all(
         (Object.keys(TABLES) as Collection[]).map(async (c) =>
           (check(await sb.from(TABLES[c]).select('*')) as Record<string, unknown>[]).map((r) =>
             fromRow(r),
@@ -62,6 +63,7 @@ export function createSupabaseRepository(sb: SupabaseClient, userId: string): Re
         recurrences,
         budgets,
         goals,
+        cards,
       } as Snapshot;
     },
     async init(snapshot) {
@@ -78,12 +80,16 @@ export function createSupabaseRepository(sb: SupabaseClient, userId: string): Re
     async upsert<K extends Collection>(collection: K, item: CollectionMap[K]) {
       check(await sb.from(TABLES[collection]).upsert({ ...toRow(item), user_id: userId }));
     },
+    async upsertMany<K extends Collection>(collection: K, items: CollectionMap[K][]) {
+      if (!items.length) return;
+      check(await sb.from(TABLES[collection]).upsert(items.map((x) => ({ ...toRow(x), user_id: userId }))));
+    },
     async remove(collection, id) {
       check(await sb.from(TABLES[collection]).delete().eq('id', id));
     },
     async wipe() {
       // ordem importa por causa das chaves estrangeiras.
-      for (const t of ['transactions', 'budgets', 'recurrences', 'goals', 'categories', 'profiles']) {
+      for (const t of ['transactions', 'budgets', 'recurrences', 'goals', 'categories', 'cards', 'profiles']) {
         check(await sb.from(t).delete().eq('user_id', userId));
       }
     },

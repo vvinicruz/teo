@@ -97,6 +97,10 @@ function Gate() {
         <Stack.Screen name="planejamento" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="perfil" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="categorias" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="cartoes" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="cartao" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="cartao-form" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="importar" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
       </Stack.Protected>
       {/* termos e privacidade ficam acessíveis sempre, inclusive antes do login. */}
       <Stack.Screen name="termos" options={{ animation: 'slide_from_right' }} />

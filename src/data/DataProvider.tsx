@@ -11,8 +11,10 @@ import {
 import { today } from '../domain/dates';
 import { emptySnapshot } from '../domain/defaults';
 import type { Entry } from '../domain/finance';
+import type { ImportRow } from '../domain/importer';
 import type {
   Budget,
+  Card,
   Category,
   Goal,
   Recurrence,
@@ -33,6 +35,7 @@ type DataStatus = 'loading' | 'ready' | 'error';
 export type NewTransaction = Omit<Transaction, 'id' | 'createdAt'>;
 export type NewRecurrence = Omit<Recurrence, 'id' | 'createdAt' | 'skippedDates'>;
 export type NewGoal = Omit<Goal, 'id' | 'createdAt'>;
+export type NewCard = Omit<Card, 'id' | 'createdAt'>;
 
 interface DataValue {
   status: DataStatus;
@@ -47,6 +50,15 @@ interface DataValue {
   deleteTransaction(id: string): Promise<void>;
   /** marca uma previsão (pendente ou ocorrência de recorrência) como realizada. */
   confirmEntry(entry: Entry, opts?: { amount?: number; date?: string }): Promise<void>;
+  /** registra o pagamento de uma fatura (sai da conta e substitui a previsão). */
+  payInvoice(card: Card, invoiceDate: string, opts?: { amount?: number; date?: string }): Promise<void>;
+  /** grava as linhas confirmadas de um extrato importado. devolve quantas foram salvas. */
+  importRows(rows: ImportRow[], cardId: string | null): Promise<number>;
+
+  addCard(c: NewCard): Promise<Card>;
+  updateCard(c: Card): Promise<void>;
+  /** apaga o cartão; se já tiver compras, ele é arquivado para não perder histórico. */
+  deleteCard(id: string): Promise<'removido' | 'arquivado'>;
 
   addRecurrence(r: NewRecurrence): Promise<Recurrence>;
   updateRecurrence(r: Recurrence): Promise<void>;
@@ -166,6 +178,29 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [commit],
   );
 
+  const payInvoice = useCallback(
+    async (card: Card, invoiceDate: string, opts: { amount?: number; date?: string } = {}) => {
+        const existing = dataRef.current.transactions.find(
+          (t) => t.paysCardId === card.id && t.invoiceDate === invoiceDate,
+        );
+        if (existing) return;
+        await upsert('transactions', {
+          id: newId(),
+          kind: 'despesa',
+          amount: opts.amount ?? 0,
+          description: `fatura ${card.name}`,
+          categoryId: null,
+          date: opts.date ?? (invoiceDate <= today() ? invoiceDate : today()),
+          status: 'realizada',
+          paymentMethod: null,
+          paysCardId: card.id,
+          invoiceDate,
+          createdAt: nowIso(),
+        });
+      },
+    [upsert],
+  );
+
   const value = useMemo<DataValue>(
     () => ({
       status,
@@ -189,6 +224,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
       async confirmEntry(entry, opts = {}) {
         const date = opts.date ?? (entry.originalDate <= today() ? entry.originalDate : today());
         const amount = opts.amount ?? entry.amount;
+        if (entry.invoiceDate && entry.cardId) {
+          const card = dataRef.current.cards.find((c) => c.id === entry.cardId);
+          if (card) await payInvoice(card, entry.invoiceDate, { amount, date });
+          return;
+        }
         if (entry.transactionId) {
           const t = dataRef.current.transactions.find((x) => x.id === entry.transactionId);
           if (!t) return;
@@ -208,9 +248,104 @@ export function DataProvider({ children }: { children: ReactNode }) {
             paymentMethod: rec?.paymentMethod ?? null,
             recurrenceId: entry.recurrenceId,
             occurrenceDate: entry.originalDate,
+            cardId: rec?.cardId ?? null,
             createdAt: nowIso(),
           });
         }
+      },
+
+      payInvoice,
+
+      async importRows(rows, cardId) {
+        const now = nowIso();
+        const items: Transaction[] = [];
+        for (const row of rows) {
+          const sug = row.suggestion;
+          const fromStatement = {
+            amount: row.amount,
+            date: row.date,
+            externalId: row.line.externalId,
+          };
+          if (row.decision === 'importar') {
+            items.push({
+              id: newId(),
+              kind: row.kind,
+              description: row.description,
+              categoryId: row.categoryId,
+              status: 'realizada',
+              paymentMethod: cardId ? 'credito' : null,
+              cardId,
+              createdAt: now,
+              ...fromStatement,
+            });
+          } else if (row.decision === 'vincular' && sug?.type === 'previsao') {
+            const e = sug.entry;
+            const existing = e.transactionId
+              ? dataRef.current.transactions.find((t) => t.id === e.transactionId)
+              : undefined;
+            if (existing) {
+              items.push({ ...existing, status: 'realizada', ...fromStatement });
+            } else if (e.recurrenceId) {
+              const rec = dataRef.current.recurrences.find((r) => r.id === e.recurrenceId);
+              items.push({
+                id: newId(),
+                kind: e.kind,
+                description: e.description,
+                categoryId: row.categoryId ?? e.categoryId,
+                status: 'realizada',
+                paymentMethod: rec?.paymentMethod ?? (cardId ? 'credito' : null),
+                recurrenceId: e.recurrenceId,
+                occurrenceDate: e.originalDate,
+                cardId,
+                createdAt: now,
+                ...fromStatement,
+              });
+            }
+          } else if (row.decision === 'vincular' && sug?.type === 'fatura') {
+            items.push({
+              id: newId(),
+              kind: 'despesa',
+              description: `fatura ${sug.card.name}`,
+              categoryId: null,
+              status: 'realizada',
+              paymentMethod: null,
+              paysCardId: sug.card.id,
+              invoiceDate: sug.invoiceDate,
+              createdAt: now,
+              ...fromStatement,
+            });
+          }
+        }
+        if (!items.length) return 0;
+        await commit(
+          (s) => {
+            const byId = new Map(s.transactions.map((t) => [t.id, t]));
+            for (const t of items) byId.set(t.id, t);
+            return { ...s, transactions: [...byId.values()] };
+          },
+          (r) => r.upsertMany('transactions', items),
+        );
+        return items.length;
+      },
+
+      async addCard(c) {
+        const item: Card = { ...c, id: newId(), createdAt: nowIso() };
+        await upsert('cards', item);
+        return item;
+      },
+      updateCard: (c) => upsert('cards', c),
+      async deleteCard(id) {
+        const s = dataRef.current;
+        const inUse =
+          s.transactions.some((t) => t.cardId === id || t.paysCardId === id) ||
+          s.recurrences.some((r) => r.cardId === id);
+        if (inUse) {
+          const card = s.cards.find((c) => c.id === id);
+          if (card) await upsert('cards', { ...card, archived: true });
+          return 'arquivado';
+        }
+        await remove('cards', id);
+        return 'removido';
       },
 
       async addRecurrence(r) {
@@ -275,7 +410,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setData(fresh);
       },
     }),
-    [status, error, data, commit, upsert, remove, repo],
+    [status, error, data, commit, upsert, remove, repo, payInvoice],
   );
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
