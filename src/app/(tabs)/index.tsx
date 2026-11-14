@@ -32,6 +32,7 @@ import {
   upcomingEntries,
   type Entry,
 } from '../../domain/finance';
+import { totalInvested } from '../../domain/investments';
 import { formatMoney } from '../../domain/money';
 import { useCategories } from '../../hooks/useCategories';
 import { openEntry } from '../../lib/navigation';
@@ -75,6 +76,7 @@ export default function Inicio() {
           );
           return { card, invoice: unpaid[0] ?? invoiceByDueDate(data, card, invoiceOf(card, todayDate).dueDate, todayDate) };
         }),
+      invested: totalInvested(data),
       recent: [...data.transactions]
         .filter((t) => t.status === 'realizada')
         .sort((a, b) => (a.date === b.date ? b.createdAt.localeCompare(a.createdAt) : a.date < b.date ? 1 : -1))
@@ -140,7 +142,7 @@ export default function Inicio() {
       <FadeIn>
         <Card style={styles.balanceCard}>
           <Text variant="smallStrong" color={colors.textSoft}>
-            saldo atual
+            {view.invested > 0 ? 'disponível na conta' : 'saldo atual'}
           </Text>
           <Money value={h.currentBalance} variant="display" color={h.currentBalance < 0 ? colors.danger : colors.text} />
           <View style={styles.monthRow}>
@@ -158,6 +160,24 @@ export default function Inicio() {
               <Money value={summary.expense} variant="bodyStrong" color={colors.primary} />
             </View>
           </View>
+          {view.invested > 0 ? (
+            <Pressable onPress={() => router.push('/guardado')} style={styles.savedRow} accessibilityRole="button">
+              <CategoryIcon icon="reserva" size={32} />
+              <View style={{ flex: 1 }}>
+                <Text variant="caption" color={colors.textSoft}>
+                  guardado
+                </Text>
+                <Money value={view.invested} variant="bodyStrong" />
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text variant="caption" color={colors.textSoft}>
+                  total
+                </Text>
+                <Money value={h.currentBalance + view.invested} variant="bodyStrong" />
+              </View>
+              <Icon as={ChevronRight} size={18} color={colors.textFaint} />
+            </Pressable>
+          ) : null}
         </Card>
       </FadeIn>
 
@@ -369,6 +389,15 @@ const styles = StyleSheet.create({
     marginBottom: space.md,
   },
   balanceCard: { gap: space.xs },
+  savedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    marginTop: space.lg,
+    paddingTop: space.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+  },
   monthRow: { flexDirection: 'row', marginTop: space.lg, paddingTop: space.lg, borderTopWidth: 1, borderTopColor: colors.line },
   monthCol: { flex: 1, gap: 2 },
   divider: { width: 1, backgroundColor: colors.line, marginHorizontal: space.lg },

@@ -58,6 +58,8 @@ export interface Entry {
   cardId?: string;
   /** presente nas previsões de fatura: vencimento da fatura. */
   invoiceDate?: ISODate;
+  /** guardar/resgatar numa caixinha. */
+  investmentId?: string;
 }
 
 const signed = (kind: Kind, amount: Cents) => (kind === 'receita' ? amount : -amount);
@@ -127,6 +129,7 @@ function txToEntry(t: Transaction, todayDate: ISODate, shiftOverdue: boolean): E
     transactionId: t.id,
     recurrenceId: t.recurrenceId ?? undefined,
     cardId: t.cardId ?? undefined,
+    investmentId: t.investmentId ?? undefined,
   };
 }
 
@@ -448,7 +451,8 @@ export interface MonthSummary {
 }
 
 export function monthSummary(s: Snapshot, month: MonthKey, todayDate: ISODate): MonthSummary {
-  const realized = realizedTransactions(s).filter((t) => monthOf(t.date) === month);
+  // guardar/resgatar mexem no saldo, mas não são "entrou" nem "saiu" do mês.
+  const realized = realizedTransactions(s).filter((t) => monthOf(t.date) === month && !t.investmentId);
   const isCurrent = month === monthOf(todayDate);
   const isPast = month < monthOf(todayDate);
   const upcoming = isCurrent
@@ -502,7 +506,12 @@ function upcomingConsumption(s: Snapshot, month: MonthKey, todayDate: ISODate): 
 export function budgetProgress(s: Snapshot, month: MonthKey, todayDate: ISODate): BudgetProgress[] {
   // consumo = compras realizadas na conta e no cartão, na data da compra.
   const consumed = s.transactions.filter(
-    (t) => t.status === 'realizada' && t.kind === 'despesa' && !t.paysCardId && monthOf(t.date) === month,
+    (t) =>
+      t.status === 'realizada' &&
+      t.kind === 'despesa' &&
+      !t.paysCardId &&
+      !t.investmentId &&
+      monthOf(t.date) === month,
   );
   const upcoming = upcomingConsumption(s, month, todayDate);
   return s.budgets
@@ -555,7 +564,8 @@ export function dailyAllowance(s: Snapshot, todayDate: ISODate): DailyAllowance 
       t.kind === 'despesa' &&
       t.date === todayDate &&
       !t.recurrenceId &&
-      !t.paysCardId,
+      !t.paysCardId &&
+      !t.investmentId,
   );
   const spentTodayCash = sum(todays.filter((t) => !t.cardId).map((t) => t.amount));
   const spentToday = sum(todays.map((t) => t.amount));

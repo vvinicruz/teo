@@ -17,6 +17,8 @@ import {
 } from '../components';
 import { useData } from '../data/DataProvider';
 import { addMonths, friendlyDate, lastDay, monthOf } from '../domain/dates';
+import { investmentBalance } from '../domain/investments';
+import { formatMoney } from '../domain/money';
 import { useToday } from '../hooks/useToday';
 import { colors, radius, space } from '../theme';
 
@@ -34,6 +36,9 @@ export default function MetaForm() {
   const [target, setTarget] = useState(existing?.target ?? 0);
   const [saved, setSaved] = useState(existing?.saved ?? 0);
   const [deadline, setDeadline] = useState<string | null>(existing?.deadline ?? null);
+  const [investmentId, setInvestmentId] = useState<string | null>(existing?.investmentId ?? null);
+  const investments = data.investments.filter((i) => !i.archived || i.id === investmentId);
+  const linked = investmentId ? data.investments.find((i) => i.id === investmentId) : undefined;
   const [dateOpen, setDateOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +61,7 @@ export default function MetaForm() {
     if (target <= 0) return setError('quanto você quer juntar?');
     setSaving(true);
     try {
-      const payload = { name: name.trim(), icon, target, saved, deadline };
+      const payload = { name: name.trim(), icon, target, saved, deadline, investmentId };
       if (existing) await updateGoal({ ...existing, ...payload });
       else await addGoal(payload);
       toast(existing ? 'meta atualizada.' : 'meta criada! um passo de cada vez.');
@@ -108,9 +113,30 @@ export default function MetaForm() {
           <AmountInput value={target} onChange={setTarget} label="quanto você quer juntar?" size="medium" color={colors.primary} />
         </View>
 
-        <View style={styles.block}>
-          <AmountInput value={saved} onChange={setSaved} label="quanto já tem guardado?" size="medium" />
-        </View>
+        {investments.length ? (
+          <View style={styles.block}>
+            <Text variant="smallStrong" color={colors.textSoft}>
+              onde você guarda esse dinheiro?
+            </Text>
+            <View style={styles.wrap}>
+              <Chip label="em nenhuma caixinha" selected={!investmentId} onPress={() => setInvestmentId(null)} />
+              {investments.map((i) => (
+                <Chip key={i.id} label={i.name} selected={investmentId === i.id} onPress={() => setInvestmentId(i.id)} />
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        {linked ? (
+          <Text variant="small" color={colors.textSoft}>
+            o progresso acompanha o saldo de “{linked.name}”: hoje, {formatMoney(investmentBalance(data, linked))}. guardar
+            na meta é guardar na caixinha.
+          </Text>
+        ) : (
+          <View style={styles.block}>
+            <AmountInput value={saved} onChange={setSaved} label="quanto já tem guardado?" size="medium" />
+          </View>
+        )}
 
         <View style={styles.block}>
           <Text variant="smallStrong" color={colors.textSoft}>

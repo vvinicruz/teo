@@ -146,6 +146,19 @@ export const HELP_TOPICS: HelpTopic[] = [
     action: { label: 'ver metas', href: '/metas' },
   },
   {
+    id: 'caixinhas',
+    icon: 'reserva',
+    title: 'caixinhas e investimentos',
+    summary: 'tudo o que você guardou, num lugar só.',
+    paragraphs: [
+      'cadastre suas caixinhas, cdb, poupança ou tesouro selic com o valor que tem hoje e quanto rendem (ex.: 100% do cdi, como aparece no app do banco).',
+      'guardar tira o dinheiro da conta e põe na caixinha; resgatar faz o caminho de volta. isso não conta como gasto: o dinheiro continua sendo seu.',
+      'o teo estima quanto rende por mês com o cdi e a selic do banco central. de vez em quando, toque em "atualizar valor" pra acertar com o banco.',
+      'dá pra ligar uma meta a uma caixinha: o progresso da meta acompanha o saldo dela.',
+    ],
+    action: { label: 'ver caixinhas', href: '/guardado' },
+  },
+  {
     id: 'esconder',
     icon: 'celular',
     title: 'esconder os valores',

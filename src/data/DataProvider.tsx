@@ -17,6 +17,7 @@ import type {
   Card,
   Category,
   Goal,
+  Investment,
   Recurrence,
   Settings,
   Snapshot,
@@ -36,6 +37,7 @@ export type NewTransaction = Omit<Transaction, 'id' | 'createdAt'>;
 export type NewRecurrence = Omit<Recurrence, 'id' | 'createdAt' | 'skippedDates'>;
 export type NewGoal = Omit<Goal, 'id' | 'createdAt'>;
 export type NewCard = Omit<Card, 'id' | 'createdAt'>;
+export type NewInvestment = Omit<Investment, 'id' | 'createdAt' | 'balanceUpdatedAt'>;
 
 interface DataValue {
   status: DataStatus;
@@ -54,6 +56,15 @@ interface DataValue {
   payInvoice(card: Card, invoiceDate: string, opts?: { amount?: number; date?: string }): Promise<void>;
   /** grava as linhas confirmadas de um extrato importado. devolve quantas foram salvas. */
   importRows(rows: ImportRow[], cardId: string | null): Promise<number>;
+
+  addInvestment(i: NewInvestment): Promise<Investment>;
+  updateInvestment(i: Investment): Promise<void>;
+  /** apaga a caixinha; se já tiver movimentações, ela é arquivada. */
+  deleteInvestment(id: string): Promise<'removida' | 'arquivada'>;
+  /** guardar (tira da conta) ou resgatar (volta para a conta). */
+  moveInvestment(inv: Investment, kind: 'guardar' | 'resgatar', amount: number, date?: string): Promise<void>;
+  /** acerta o valor da caixinha com o que aparece no banco (o rendimento entra aqui). */
+  setInvestmentBalance(inv: Investment, balance: number): Promise<void>;
 
   addCard(c: NewCard): Promise<Card>;
   updateCard(c: Card): Promise<void>;
@@ -326,6 +337,42 @@ export function DataProvider({ children }: { children: ReactNode }) {
           (r) => r.upsertMany('transactions', items),
         );
         return items.length;
+      },
+
+      async addInvestment(i) {
+        const now = nowIso();
+        const item: Investment = { ...i, id: newId(), balanceUpdatedAt: now, createdAt: now };
+        await upsert('investments', item);
+        return item;
+      },
+      updateInvestment: (i) => upsert('investments', i),
+      async deleteInvestment(id) {
+        const s = dataRef.current;
+        const inUse = s.transactions.some((t) => t.investmentId === id) || s.goals.some((g) => g.investmentId === id);
+        if (inUse) {
+          const inv = s.investments.find((x) => x.id === id);
+          if (inv) await upsert('investments', { ...inv, archived: true });
+          return 'arquivada';
+        }
+        await remove('investments', id);
+        return 'removida';
+      },
+      async moveInvestment(inv, kind, amount, date) {
+        await upsert('transactions', {
+          id: newId(),
+          kind: kind === 'guardar' ? 'despesa' : 'receita',
+          amount,
+          description: kind === 'guardar' ? `guardado em ${inv.name}` : `resgatado de ${inv.name}`,
+          categoryId: null,
+          date: date ?? today(),
+          status: 'realizada',
+          paymentMethod: null,
+          investmentId: inv.id,
+          createdAt: nowIso(),
+        });
+      },
+      async setInvestmentBalance(inv, balance) {
+        await upsert('investments', { ...inv, balance, balanceUpdatedAt: nowIso() });
       },
 
       async addCard(c) {

@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { CalendarDays, CreditCard, FileUp, Repeat, SkipForward, Trash2, X } from 'lucide-react-native';
+import { CalendarDays, CreditCard, FileUp, Landmark, Repeat, SkipForward, Trash2, X } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import {
@@ -93,6 +93,9 @@ export default function Movimentacao() {
   // pagamento de fatura: um lançamento especial, sem categoria nem cartão.
   const paidCard = existing?.paysCardId ? data.cards.find((c) => c.id === existing.paysCardId) : undefined;
   const isInvoicePayment = !!existing?.paysCardId;
+  // guardar/resgatar numa caixinha: também sem categoria nem cartão.
+  const movedInvestment = existing?.investmentId ? data.investments.find((i) => i.id === existing.investmentId) : undefined;
+  const isSpecial = isInvoicePayment || !!existing?.investmentId;
   const card = cardId ? data.cards.find((c) => c.id === cardId) : undefined;
   const hasCards = data.cards.some((c) => !c.archived) || !!cardId;
   const accent = isIncome ? colors.income : colors.text;
@@ -264,6 +267,17 @@ export default function Movimentacao() {
         </Pressable>
       ) : null}
 
+      {existing?.investmentId ? (
+        <View style={styles.recInfo}>
+          <Icon as={Landmark} size={18} color={colors.primary} />
+          <Text variant="small" color={colors.textSoft} style={{ flex: 1 }}>
+            {isIncome ? 'resgate da caixinha ' : 'dinheiro guardado na caixinha '}
+            <Text variant="smallStrong">{movedInvestment?.name ?? ''}</Text>. não conta como{' '}
+            {isIncome ? 'receita' : 'gasto'}: o dinheiro continua sendo seu.
+          </Text>
+        </View>
+      ) : null}
+
       {paidCard ? (
         <View style={styles.recInfo}>
           <Icon as={CreditCard} size={18} color={colors.primary} />
@@ -308,7 +322,7 @@ export default function Movimentacao() {
           returnKeyType="done"
         />
 
-        {hasCards && !isInvoicePayment ? (
+        {hasCards && !isSpecial ? (
           <View style={styles.block}>
             <Text variant="smallStrong" color={colors.textSoft}>
               {isIncome ? 'onde entrou?' : 'onde foi?'}
@@ -331,7 +345,7 @@ export default function Movimentacao() {
           </View>
         ) : null}
 
-        {!isInvoicePayment ? (
+        {!isSpecial ? (
           <View style={styles.block}>
             <Text variant="smallStrong" color={colors.textSoft}>
               categoria
@@ -356,7 +370,7 @@ export default function Movimentacao() {
           </View>
         </View>
 
-        {card || isInvoicePayment ? null : (
+        {card || isSpecial ? null : (
         <View style={styles.block}>
           <Text variant="smallStrong" color={colors.textSoft}>
             {isIncome ? 'já recebeu?' : 'já pagou?'}

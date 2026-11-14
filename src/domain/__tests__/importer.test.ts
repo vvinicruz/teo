@@ -62,7 +62,7 @@ const nubank: Card = { id: 'nu', name: 'nubank', closingDay: 3, dueDay: 10, cred
 function base(over: Partial<Snapshot> = {}): Snapshot {
   return {
     settings: { name: 'v', initialBalance: 0, initialBalanceDate: '2026-11-01', reserve: 0, hideValues: false, onboarded: true },
-    categories: cats, transactions: [], recurrences: [], budgets: [], goals: [], cards: [nubank], ...over,
+    categories: cats, transactions: [], recurrences: [], budgets: [], goals: [], cards: [nubank], investments: [], ...over,
   };
 }
 let n = 0;

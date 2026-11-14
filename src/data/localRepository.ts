@@ -21,7 +21,9 @@ export function createLocalRepository(): Repository {
       const raw = await AsyncStorage.getItem(KEY);
       // dados salvos por versões antigas do app podem não ter coleções novas.
       const parsed = raw ? (JSON.parse(raw) as Partial<Snapshot>) : null;
-      cache = parsed ? ({ ...parsed, cards: parsed.cards ?? [] } as Snapshot) : null;
+      cache = parsed
+        ? ({ ...parsed, cards: parsed.cards ?? [], investments: parsed.investments ?? [] } as Snapshot)
+        : null;
       return cache;
     },
     async init(snapshot) {

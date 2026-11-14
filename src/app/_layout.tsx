@@ -102,6 +102,9 @@ function Gate() {
         <Stack.Screen name="cartao-form" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="importar" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="ajuda" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="guardado" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="caixinha" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="caixinha-form" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
       </Stack.Protected>
       {/* termos e privacidade ficam acessíveis sempre, inclusive antes do login. */}
       <Stack.Screen name="termos" options={{ animation: 'slide_from_right' }} />

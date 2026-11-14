@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { Minus, Plus } from 'lucide-react-native';
+import { ChevronRight, Minus, Plus } from 'lucide-react-native';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import {
@@ -9,6 +9,8 @@ import {
   CategoryIcon,
   EmptyState,
   FadeIn,
+  Icon,
+  InvestmentMoveSheet,
   IconButton,
   Mascot,
   Money,
@@ -23,7 +25,9 @@ import { useData } from '../../data/DataProvider';
 import { daysInclusive, friendlyDate } from '../../domain/dates';
 import { goalProgress } from '../../domain/finance';
 import { formatMoney } from '../../domain/money';
-import type { Goal } from '../../domain/types';
+import { goalSaved, investmentBalance, monthlyYield, totalInvested } from '../../domain/investments';
+import type { Goal, Investment } from '../../domain/types';
+import { useIndexRates } from '../../hooks/useIndexRates';
 import { useToday } from '../../hooks/useToday';
 import { colors, space } from '../../theme';
 
@@ -38,10 +42,25 @@ export default function Metas() {
   const [value, setValue] = useState(0);
   const [saving, setSaving] = useState(false);
 
-  const goals = [...data.goals].sort((a, b) => goalProgress(b.saved, b.target) - goalProgress(a.saved, a.target));
+  const [invMove, setInvMove] = useState<{ inv: Investment; move: Move; goalName: string } | null>(null);
+  const rates = useIndexRates();
+  // metas ligadas a uma caixinha usam o saldo dela como "guardado".
+  const goals = data.goals
+    .map((g) => ({ ...g, saved: goalSaved(data, g) }))
+    .sort((a, b) => goalProgress(b.saved, b.target) - goalProgress(a.saved, a.target));
+  const investments = data.investments.filter((i) => !i.archived);
+  const invested = totalInvested(data);
+  const investedYield = rates
+    ? investments.reduce((a, i) => a + (monthlyYield(investmentBalance(data, i), i, rates) ?? 0), 0)
+    : 0;
   const [featured, ...others] = goals;
 
   const openMove = (g: Goal, m: Move = 'guardar') => {
+    const inv = g.investmentId ? data.investments.find((i) => i.id === g.investmentId) : undefined;
+    if (inv) {
+      setInvMove({ inv, move: m, goalName: g.name });
+      return;
+    }
     setTarget(g);
     setMove(m);
     setValue(0);
@@ -78,6 +97,28 @@ export default function Metas() {
         <Text variant="title">metas</Text>
         <Button label="nova meta" icon={Plus} small onPress={() => router.push('/meta')} />
       </View>
+
+      <Card tone="cream" onPress={() => router.push('/guardado')} style={styles.saved}>
+        <CategoryIcon icon="reserva" size={44} tone="primary" />
+        <View style={{ flex: 1 }}>
+          <Text variant="small" color={colors.textSoft}>
+            dinheiro guardado
+          </Text>
+          {investments.length ? (
+            <>
+              <Money value={invested} variant="heading" />
+              {investedYield > 0 && !data.settings.hideValues ? (
+                <Text variant="caption" color={colors.income}>
+                  rende cerca de {formatMoney(investedYield)} por mês
+                </Text>
+              ) : null}
+            </>
+          ) : (
+            <Text variant="bodyStrong">cadastre suas caixinhas e investimentos</Text>
+          )}
+        </View>
+        <Icon as={ChevronRight} color={colors.primary} />
+      </Card>
 
       {!featured ? (
         <EmptyState
@@ -138,7 +179,7 @@ export default function Metas() {
           ) : null}
 
           <Text variant="small" color={colors.textFaint} center style={{ marginTop: space.xxl }}>
-            as metas acompanham quanto você separou para cada sonho. elas não alteram seu saldo no teo.
+            metas ligadas a uma caixinha acompanham o saldo dela. as outras só registram quanto você separou, sem mexer no seu saldo.
           </Text>
         </>
       )}
@@ -162,11 +203,19 @@ export default function Metas() {
           <Button label={move === 'guardar' ? 'guardar valor' : 'retirar valor'} onPress={saveMove} loading={saving} disabled={value <= 0} />
         </View>
       </Sheet>
+
+      <InvestmentMoveSheet
+        investment={invMove?.inv ?? null}
+        initial={invMove?.move === 'retirar' ? 'resgatar' : 'guardar'}
+        goalName={invMove?.goalName}
+        onClose={() => setInvMove(null)}
+      />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  saved: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginBottom: space.xl },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: space.lg, paddingBottom: space.xl },
   featured: { alignItems: 'center', gap: space.md, paddingVertical: space.xxl },
   progressRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, alignSelf: 'stretch', marginTop: space.sm },

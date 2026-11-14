@@ -256,7 +256,7 @@ function DayEntry({ entry }: { entry: Entry }) {
   const cardName = entry.cardId && !isInvoice ? data.cards.find((c) => c.id === entry.cardId)?.name : null;
   return (
     <Pressable onPress={() => openEntry(entry)} style={styles.entryLine} scaleTo={0.98} accessibilityRole="button">
-      <CategoryIcon icon={isInvoice ? 'cartao' : cat?.icon} size={28} tone={income ? 'income' : planned || cardName ? 'muted' : 'cream'} />
+      <CategoryIcon icon={entry.investmentId ? 'reserva' : isInvoice ? 'cartao' : cat?.icon} size={28} tone={income ? 'income' : planned || cardName ? 'muted' : 'cream'} />
       <View style={{ flex: 1 }}>
         <Text variant="smallStrong" numberOfLines={1}>
           {entry.description}
@@ -266,6 +266,10 @@ function DayEntry({ entry }: { entry: Entry }) {
             ? `a confirmar · era dia ${parseISODate(entry.originalDate).day}`
             : cardName
               ? `no cartão ${cardName} · vai para a fatura`
+              : entry.investmentId
+                ? entry.kind === 'despesa'
+                  ? 'guardado na caixinha'
+                  : 'resgatado da caixinha'
               : isInvoice
                 ? 'fatura prevista'
                 : entry.source === 'realizada'

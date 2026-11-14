@@ -6,6 +6,7 @@ import {
   CreditCard,
   Eye,
   FileText,
+  Landmark,
   LifeBuoy,
   LogOut,
   PiggyBank,
@@ -137,6 +138,7 @@ export default function Perfil() {
         <Item icon={Wallet} label="saldo inicial" detail={<Money value={s.initialBalance} variant="small" color={colors.textSoft} />} onPress={() => open('saldo')} />
         <Item icon={PiggyBank} label="reserva que não quero gastar" detail={<Money value={s.reserve} variant="small" color={colors.textSoft} />} onPress={() => open('reserva')} />
         <Item icon={CreditCard} label="cartões de crédito" onPress={() => router.push('/cartoes')} />
+        <Item icon={Landmark} label="caixinhas e investimentos" onPress={() => router.push('/guardado')} />
         <Item icon={Repeat} label="contas fixas e recorrências" onPress={() => router.push('/recorrencias')} />
         <Item icon={SlidersHorizontal} label="planejamento do mês" onPress={() => router.push('/planejamento')} />
         <Item icon={Tags} label="categorias" onPress={() => router.push('/categorias')} last />

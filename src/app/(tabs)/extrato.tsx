@@ -68,7 +68,8 @@ export default function Extrato() {
     list.sort((a, b) => (a.date === b.date ? b.createdAt.localeCompare(a.createdAt) : a.date < b.date ? 1 : -1));
     const map = new Map<string, Transaction[]>();
     for (const t of list) map.set(t.date, [...(map.get(t.date) ?? []), t]);
-    const realized = list.filter((t) => t.status === 'realizada');
+    // guardar/resgatar não são entrada nem gasto: o dinheiro continua sendo seu.
+    const realized = list.filter((t) => t.status === 'realizada' && !t.investmentId);
     return {
       groups: [...map.entries()],
       income: realized.filter((t) => t.kind === 'receita').reduce((a, t) => a + t.amount, 0),
@@ -177,7 +178,7 @@ export default function Extrato() {
       ) : (
         groups.map(([date, items]) => {
           const dayTotal = items
-            .filter((t) => t.status === 'realizada' && !t.paysCardId)
+            .filter((t) => t.status === 'realizada' && !t.paysCardId && !t.investmentId)
             .reduce((a, t) => a + (t.kind === 'receita' ? t.amount : -t.amount), 0);
           return (
             <View key={date} style={styles.group}>
@@ -185,7 +186,7 @@ export default function Extrato() {
                 <Text variant="smallStrong" color={colors.textSoft}>
                   {friendlyDate(date, todayDate)} · {weekday(date)}
                 </Text>
-                {items.some((t) => t.status === 'realizada' && !t.paysCardId) ? (
+                {items.some((t) => t.status === 'realizada' && !t.paysCardId && !t.investmentId) ? (
                   <Money value={dayTotal} sign variant="small" color={colors.textFaint} />
                 ) : null}
               </View>

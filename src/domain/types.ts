@@ -62,6 +62,11 @@ export interface Transaction {
   invoiceDate?: ISODate | null;
   /** identificador vindo do extrato importado, para não importar duas vezes. */
   externalId?: string | null;
+  /**
+   * movimentação entre a conta e uma caixinha/investimento: despesa = guardar,
+   * receita = resgatar. não é gasto nem receita: o dinheiro continua sendo seu.
+   */
+  investmentId?: string | null;
   createdAt: string;
 }
 
@@ -99,6 +104,8 @@ export interface Goal {
   target: Cents;
   saved: Cents;
   deadline?: ISODate | null;
+  /** quando a meta é guardada numa caixinha, o progresso acompanha o saldo dela. */
+  investmentId?: string | null;
   createdAt: string;
 }
 
@@ -134,6 +141,31 @@ export interface Card {
   createdAt: string;
 }
 
+export type InvestmentKind = 'caixinha' | 'cdb' | 'poupanca' | 'tesouro' | 'outro';
+
+export const INVESTMENT_KINDS: { id: InvestmentKind; label: string }[] = [
+  { id: 'caixinha', label: 'caixinha' },
+  { id: 'cdb', label: 'cdb' },
+  { id: 'poupanca', label: 'poupança' },
+  { id: 'tesouro', label: 'tesouro selic' },
+  { id: 'outro', label: 'outro' },
+];
+
+/** dinheiro guardado: caixinha, cdb, poupança, tesouro selic... */
+export interface Investment {
+  id: string;
+  name: string;
+  kind: InvestmentKind;
+  /** rendimento em % do cdi (ex.: 100). vazio = não sabemos. */
+  cdiPercent: number | null;
+  /** último valor informado pela pessoa. */
+  balance: Cents;
+  /** quando esse valor foi informado. guardar/resgatar depois disso somam ao valor. */
+  balanceUpdatedAt: string;
+  archived?: boolean;
+  createdAt: string;
+}
+
 export interface Snapshot {
   settings: Settings;
   categories: Category[];
@@ -142,4 +174,5 @@ export interface Snapshot {
   budgets: Budget[];
   goals: Goal[];
   cards: Card[];
+  investments: Investment[];
 }
