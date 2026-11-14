@@ -75,16 +75,20 @@ function Gate() {
 
   const signedIn = auth.status === 'signedIn';
   const onboarded = signedIn && data.settings.onboarded;
+  // para onde cada pessoa deve ir agora. usado quando a tela atual deixa de valer
+  // (ex.: ao criar a conta, o login some e a pessoa vai para as boas-vindas).
+  // sem isso, o roteador escolhe sozinho e pode cair nos termos de uso.
+  const home = !signedIn ? '/entrar' : !onboarded ? '/boas-vindas' : '/';
 
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background }, animation: 'fade_from_bottom' }}>
-      <Stack.Protected guard={!signedIn}>
+      <Stack.Protected guard={!signedIn} redirectTo={home}>
         <Stack.Screen name="entrar" />
       </Stack.Protected>
-      <Stack.Protected guard={signedIn && !onboarded}>
+      <Stack.Protected guard={signedIn && !onboarded} redirectTo={home}>
         <Stack.Screen name="boas-vindas" />
       </Stack.Protected>
-      <Stack.Protected guard={onboarded}>
+      <Stack.Protected guard={onboarded} redirectTo={home}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="movimentacao" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="recorrencia" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
