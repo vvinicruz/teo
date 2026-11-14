@@ -10,7 +10,7 @@ import { formatMoney } from '../domain/money';
 import { useToday } from '../hooks/useToday';
 import { colors, radius, space } from '../theme';
 
-const STATUS = { aberta: 'aberta', fechada: 'fechada · aguardando pagamento', paga: 'paga' } as const;
+const STATUS = { aberta: 'aberta', fechada: 'fechada · aguardando pagamento', paga: 'paga', parcial: 'paga em parte' } as const;
 
 export default function Cartoes() {
   const { data } = useData();

@@ -6,6 +6,7 @@ import {
   CreditCard,
   Eye,
   FileText,
+  LifeBuoy,
   LogOut,
   PiggyBank,
   RotateCcw,
@@ -193,6 +194,7 @@ export default function Perfil() {
       </Group>
 
       <Group title="sobre">
+        <Item icon={LifeBuoy} label="como usar o teo" onPress={() => router.push('/ajuda')} />
         <Item icon={FileText} label="termos de uso" onPress={() => router.push('/termos')} />
         <Item icon={ShieldCheck} label="política de privacidade" onPress={() => router.push('/privacidade')} last />
       </Group>

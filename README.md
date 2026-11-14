@@ -85,7 +85,14 @@ supabase/         estrutura do banco e regras de segurança
   planejado restante vira zero.
 - **dá pra gastar por dia** = (saldo atual + o que vai entrar − o que vai sair − reserva) ÷ dias restantes.
 
-todas essas regras têm testes em `src/domain/__tests__/finance.test.ts`.
+- **cartão de crédito:** compras no cartão não mexem no saldo; entram na fatura (pelo dia de fechamento)
+  e a fatura vira despesa prevista no vencimento. pagar a fatura substitui a previsão.
+- **pagamento parcial:** o que falta vai para a próxima fatura, com juros + iof estimados pela taxa
+  informada no cartão ou pela média do banco no banco central (`src/lib/bcbRates.ts`, dados abertos).
+- **importação:** ofx/csv lidos no aparelho (`src/domain/importer.ts`); perguntas antes de importar
+  o que parece repetido.
+
+as regras têm testes em `src/domain/__tests__/`.
 
 ## identidade
 

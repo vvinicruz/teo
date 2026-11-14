@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { Check, ChevronRight, Eye, EyeOff, SlidersHorizontal } from 'lucide-react-native';
+import { Check, ChevronRight, Eye, EyeOff, LifeBuoy, SlidersHorizontal } from 'lucide-react-native';
 import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import {
@@ -336,7 +336,14 @@ export default function Inicio() {
         )}
       </Section>
 
-      <Text variant="small" color={colors.textFaint} center style={{ marginTop: space.xxl }}>
+      <Pressable onPress={() => router.push('/ajuda')} style={styles.helpLink} accessibilityRole="link">
+        <Icon as={LifeBuoy} size={16} color={colors.primary} />
+        <Text variant="small" color={colors.textSoft}>
+          dúvidas? <Text variant="smallStrong" color={colors.primary}>veja como usar o teo</Text>
+        </Text>
+      </Pressable>
+
+      <Text variant="small" color={colors.textFaint} center style={{ marginTop: space.md }}>
         previsão até {friendlyDate(lastDay(month), todayDate)} · {view.h.days.length} dias no horizonte
       </Text>
     </Screen>
@@ -369,6 +376,7 @@ const styles = StyleSheet.create({
   mood: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.lg, paddingHorizontal: space.xs },
   list: { paddingHorizontal: space.lg, paddingVertical: space.xs },
   budgetHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
+  helpLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: space.xxl },
   cardRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
   cardRowSep: { borderBottomWidth: 1, borderBottomColor: colors.line },
   planCta: { flexDirection: 'row', alignItems: 'center', gap: space.md },

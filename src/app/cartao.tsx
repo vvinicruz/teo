@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { ChevronLeft, ChevronRight, FileUp, Pencil, Plus } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, FileUp, Pencil, Plus, TriangleAlert } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import {
@@ -10,6 +10,7 @@ import {
   Chip,
   EmptyState,
   EntryRow,
+  Icon,
   IconButton,
   Money,
   Screen,
@@ -20,14 +21,18 @@ import {
 import { useData } from '../data/DataProvider';
 import { addMonths, friendlyDate, monthName, monthOf, shortDate } from '../domain/dates';
 import { closingDateIn, dueDateFor, invoiceByDueDate, invoiceOf, invoicePeriod } from '../domain/finance';
+import { formatRate, estimateRevolving } from '../domain/interest';
 import { formatMoney } from '../domain/money';
+import { useCardRates } from '../hooks/useCardRates';
+import { periodLabel, rateFor } from '../lib/bcbRates';
 import { useToday } from '../hooks/useToday';
 import { openEntry } from '../lib/navigation';
-import { colors, space } from '../theme';
+import { colors, radius, space } from '../theme';
 
 export default function CartaoDetalhe() {
   const { id, fatura } = useLocalSearchParams<{ id: string; fatura?: string }>();
-  const { data, payInvoice, deleteTransaction } = useData();
+  const { data, payInvoice, deleteTransaction, updateCard } = useData();
+  const rates = useCardRates();
   const { toast, confirm } = useFeedback();
   const todayDate = useToday();
   const card = data.cards.find((c) => c.id === id);
@@ -58,9 +63,27 @@ export default function CartaoDetalhe() {
   }
 
   const period = invoicePeriod(card, invoice.dueDate);
+
+  // juros do rotativo: a taxa informada no cartão ou a média do banco no banco central.
+  const bcbRotativo = rates ? rateFor(rates, card.bankCode, 'rotativo') : null;
+  const bcbParcelado = rates ? rateFor(rates, card.bankCode, 'parcelado') : null;
+  const rate = card.revolvingRate ?? bcbRotativo?.monthly ?? null;
+  const rateOrigin =
+    card.revolvingRateSource === 'fatura' && card.revolvingRate != null
+      ? 'taxa da sua fatura'
+      : bcbRotativo && rates
+        ? `média ${bcbRotativo.isMarketAverage || !card.bankName ? 'dos bancos' : `do ${card.bankName}`} no banco central, ${periodLabel(rates)}`
+        : 'taxa informada no cartão';
+  const remaining = Math.max(0, invoice.total - payAmount);
+  const estimate = rate != null ? estimateRevolving(remaining, rate) : null;
+  const partialInvoice = invoice.status === 'parcial' && invoice.payment ? invoice.total - invoice.payment.amount : 0;
+  const partialEstimate = partialInvoice && rate != null ? estimateRevolving(partialInvoice, rate) : null;
+
   const statusBadge =
     invoice.status === 'paga' ? (
       <Badge label="paga" tone="ok" />
+    ) : invoice.status === 'parcial' ? (
+      <Badge label="paga em parte" tone="atencao" />
     ) : invoice.status === 'aberta' ? (
       <Badge label="aberta" tone="pendente" />
     ) : invoice.dueDate < todayDate ? (
@@ -79,8 +102,12 @@ export default function CartaoDetalhe() {
     if (payAmount <= 0) return;
     setPaying(true);
     try {
+      // pagamento parcial sem taxa no cartão: guardamos a média do banco para estimar os juros.
+      if (payAmount < invoice.total && card.revolvingRate == null && bcbRotativo) {
+        await updateCard({ ...card, revolvingRate: bcbRotativo.monthly, revolvingRateSource: 'bcb' });
+      }
       await payInvoice(card, invoice.dueDate, { amount: payAmount, date: payToday ? todayDate : invoice.dueDate });
-      toast('fatura paga! tudo em ordem :)');
+      toast(payAmount < invoice.total ? 'pagamento registrado. o restante foi para a próxima fatura.' : 'fatura paga! tudo em ordem :)');
       setPayOpen(false);
     } catch {
       toast('não conseguimos salvar agora. tenta de novo?', 'erro');
@@ -130,9 +157,19 @@ export default function CartaoDetalhe() {
             ? `paga ${friendlyDate(invoice.payment.date, todayDate)}${invoice.payment.amount !== invoice.total ? ` (${formatMoney(invoice.payment.amount)})` : ''}`
             : `vence ${friendlyDate(invoice.dueDate, todayDate)}`}
         </Text>
+        {invoice.status === 'parcial' ? (
+          <View style={styles.warn}>
+            <Icon as={TriangleAlert} size={18} color={colors.attention} />
+            <Text variant="small" color={colors.attention} style={{ flex: 1 }}>
+              faltaram {formatMoney(partialInvoice)}, que foram para a próxima fatura
+              {partialEstimate ? ` com cerca de ${formatMoney(partialEstimate.cost)} de juros e iof (estimativa)` : ' com juros do rotativo'}
+              . se puder, vale quitar antes do próximo vencimento.
+            </Text>
+          </View>
+        ) : null}
         {invoice.items.some((e) => e.source === 'prevista') ? (
           <Text variant="small" color={colors.textFaint}>
-            inclui assinaturas e parcelas previstas.
+            inclui valores previstos (assinaturas, parcelas ou juros estimados).
           </Text>
         ) : null}
         {!invoice.payment && invoice.total > 0 ? (
@@ -166,7 +203,21 @@ export default function CartaoDetalhe() {
       ) : (
         <Card padded={false} style={styles.list}>
           {invoice.items.map((e) => (
-            <EntryRow key={e.key} item={{ ...e, date: e.originalDate, cardId: undefined }} onPress={() => openEntry(e)} />
+            <EntryRow
+              key={e.key}
+              item={{
+                ...e,
+                date: e.originalDate,
+                cardId: undefined,
+                ...(e.key.startsWith('s:') || e.key.startsWith('j:')
+                  ? {
+                      iconOverride: 'investimentos',
+                      metaOverride: `da fatura que venceu em ${shortDate(e.originalDate)}${e.key.startsWith('j:') ? ' · estimativa' : ''}`,
+                    }
+                  : {}),
+              }}
+              onPress={e.key.startsWith('s:') || e.key.startsWith('j:') ? undefined : () => openEntry(e)}
+            />
           ))}
         </Card>
       )}
@@ -175,6 +226,27 @@ export default function CartaoDetalhe() {
         <View style={{ gap: space.lg }}>
           <Text color={colors.textSoft}>quanto você pagou? se pagou só uma parte, ajuste o valor.</Text>
           <AmountInput value={payAmount} onChange={setPayAmount} />
+          {payAmount > 0 && remaining > 0 ? (
+            <View style={styles.warn}>
+              <Icon as={TriangleAlert} size={18} color={colors.attention} />
+              <View style={{ flex: 1, gap: space.xs }}>
+                <Text variant="smallStrong" color={colors.attention}>
+                  você não está pagando a fatura inteira
+                </Text>
+                <Text variant="small" color={colors.textSoft}>
+                  {`os ${formatMoney(remaining)} que faltam vão para a próxima fatura no crédito rotativo`}
+                  {estimate && rate != null
+                    ? `, com juros de cerca de ${formatRate(rate)} ao mês + iof. isso dá uns ${formatMoney(estimate.cost)} a mais (${rateOrigin}).`
+                    : ', que costuma ter os juros mais altos do mercado.'}
+                </Text>
+                <Text variant="small" color={colors.textSoft}>
+                  {bcbParcelado && bcbParcelado.monthly < (rate ?? Infinity)
+                    ? `se não der para pagar tudo, parcelar a fatura costuma sair mais barato (média de ${formatRate(bcbParcelado.monthly)} ao mês). vale conferir no app do banco.`
+                    : 'se não der para pagar tudo, vale conferir no app do banco se parcelar a fatura sai mais barato.'}
+                </Text>
+              </View>
+            </View>
+          ) : null}
           <View style={{ flexDirection: 'row', gap: space.sm, justifyContent: 'center' }}>
             <Chip label="paguei hoje" selected={payToday} onPress={() => setPayToday(true)} />
             {invoice.dueDate < todayDate ? (
@@ -192,5 +264,13 @@ const styles = StyleSheet.create({
   monthRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginVertical: space.md },
   statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   actions: { flexDirection: 'row', gap: space.sm, marginVertical: space.lg },
+  warn: {
+    flexDirection: 'row',
+    gap: space.sm,
+    padding: space.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.attentionSoft,
+    marginTop: space.sm,
+  },
   list: { paddingHorizontal: space.lg, paddingVertical: space.xs },
 });

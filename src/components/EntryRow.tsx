@@ -27,6 +27,9 @@ export interface EntryRowData {
   invoiceDate?: string | null;
   /** pagamento de fatura. */
   paysCardId?: string | null;
+  /** textos e ícone próprios (ex.: saldo e juros da fatura anterior). */
+  metaOverride?: string;
+  iconOverride?: string;
 }
 
 interface Props {
@@ -47,7 +50,7 @@ export function EntryRow({ item, onPress, hideDate, right }: Props) {
   const isInvoice = invoiceForecast || !!item.paysCardId;
   const cardName = item.cardId && !invoiceForecast ? data.cards.find((c) => c.id === item.cardId)?.name : null;
 
-  const meta = [
+  const meta = item.metaOverride ?? [
     invoiceForecast ? 'fatura do cartão' : item.paysCardId ? 'pagamento de fatura' : (cat?.name ?? 'sem categoria'),
     cardName ? `cartão ${cardName}` : null,
     hideDate ? null : friendlyDate(item.date),
@@ -58,7 +61,7 @@ export function EntryRow({ item, onPress, hideDate, right }: Props) {
 
   const body = (
     <View style={[styles.row, planned && styles.planned]}>
-      <CategoryIcon icon={isInvoice ? 'cartao' : cat?.icon} tone={isIncome ? 'income' : planned ? 'muted' : 'cream'} size={42} />
+      <CategoryIcon icon={item.iconOverride ?? (isInvoice ? 'cartao' : cat?.icon)} tone={isIncome ? 'income' : planned ? 'muted' : 'cream'} size={42} />
       <View style={styles.middle}>
         <Text variant="bodyStrong" numberOfLines={1}>
           {item.description}

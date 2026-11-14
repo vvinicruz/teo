@@ -157,3 +157,38 @@ describe('limite', () => {
     expect(cardLimitUsed(s, nubank, TODAY)).toBe(15000);
   });
 });
+
+describe('pagamento parcial (rotativo)', () => {
+  const pagar = (amount: number, due = '2026-12-10') =>
+    tx({ amount, date: due, paysCardId: 'nu', invoiceDate: due, description: 'fatura nubank' });
+
+  it('o que falta vai para a próxima fatura, com juros e iof estimados', () => {
+    const card = { ...nubank, revolvingRate: 13.38 };
+    const s = base({ cards: [card], transactions: [tx({ amount: 120000, cardId: 'nu' }), pagar(30000)] });
+    const invs = cardInvoices(s, card, '2027-01-31', '2026-12-11');
+    expect(invs[0]).toMatchObject({ dueDate: '2026-12-10', total: 120000, status: 'parcial' });
+    expect(invs[1].dueDate).toBe('2027-01-10');
+    const saldo = invs[1].items.find((e) => e.description === 'saldo da fatura anterior');
+    const juros = invs[1].items.find((e) => e.description.startsWith('juros'));
+    expect(saldo?.amount).toBe(90000);
+    // 13,38% de 900 = 120,42 + iof (0,38% + 0,0082% x 30 dias = 0,626%) = 5,63
+    expect(juros?.amount).toBe(12042 + 563);
+    expect(invs[1].total).toBe(90000 + 12605);
+    // e a próxima fatura vira previsão no horizonte
+    const up = upcomingEntries(s, '2026-12-11', '2027-01-31');
+    expect(up.map((e) => [e.description, e.amount])).toEqual([['fatura nubank', 102605]]);
+  });
+
+  it('sem taxa informada, leva só o saldo (sem inventar juros)', () => {
+    const s = base({ transactions: [tx({ amount: 120000, cardId: 'nu' }), pagar(30000)] });
+    const invs = cardInvoices(s, nubank, '2027-01-31', '2026-12-11');
+    expect(invs[1].total).toBe(90000);
+  });
+
+  it('pagar o total fecha a fatura sem levar nada', () => {
+    const s = base({ cards: [{ ...nubank, revolvingRate: 13 }], transactions: [tx({ amount: 120000, cardId: 'nu' }), pagar(120000)] });
+    const invs = cardInvoices(s, s.cards[0], '2027-01-31', '2026-12-11');
+    expect(invs).toHaveLength(1);
+    expect(invs[0].status).toBe('paga');
+  });
+});

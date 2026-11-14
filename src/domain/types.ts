@@ -123,6 +123,13 @@ export interface Card {
   dueDay: number;
   /** limite do cartão (opcional). */
   creditLimit: Cents | null;
+  /** banco emissor (código do banco central, 8 dígitos do cnpj), para estimar juros. */
+  bankCode?: string | null;
+  bankName?: string | null;
+  /** juros do rotativo, em % ao mês. */
+  revolvingRate?: number | null;
+  /** de onde veio a taxa: da fatura (informada pela pessoa) ou média do banco no banco central. */
+  revolvingRateSource?: 'fatura' | 'bcb' | null;
   archived?: boolean;
   createdAt: string;
 }

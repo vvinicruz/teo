@@ -31,6 +31,7 @@ import {
   type ISODate,
   type MonthKey,
 } from './dates';
+import { estimateRevolving } from './interest';
 import { sum, type Cents } from './money';
 import type { Budget, Card, Kind, Recurrence, Snapshot, Transaction } from './types';
 
@@ -216,7 +217,8 @@ export function invoicePeriod(card: Card, dueDate: ISODate): { start: ISODate; c
   return { start, closingDate };
 }
 
-export type InvoiceStatus = 'aberta' | 'fechada' | 'paga';
+/** parcial = pagou só uma parte; o restante foi para a próxima fatura. */
+export type InvoiceStatus = 'aberta' | 'fechada' | 'paga' | 'parcial';
 
 export interface Invoice {
   card: Card;
@@ -267,15 +269,67 @@ export function cardInvoices(
     g.items.push(item);
     groups.set(dueDate, g);
   }
-  return [...groups.entries()]
-    .sort(([a], [b]) => (a < b ? -1 : 1))
-    .map(([dueDate, g]) => {
-      const payment =
-        s.transactions.find((t) => t.paysCardId === card.id && t.invoiceDate === dueDate) ?? null;
-      const total = sum(g.items.map((e) => -signed(e.kind, e.amount)));
-      const status: InvoiceStatus = payment ? 'paga' : todayDate <= g.closingDate ? 'aberta' : 'fechada';
-      return { card, closingDate: g.closingDate, dueDate, items: g.items.sort(compareEntries), total, payment, status };
-    });
+
+  // em ordem cronológica, porque o que não foi pago numa fatura vai para a seguinte.
+  const dues = [...groups.keys()].sort();
+  const out: Invoice[] = [];
+  for (let i = 0; i < dues.length; i++) {
+    const dueDate = dues[i];
+    const g = groups.get(dueDate)!;
+    const payment = s.transactions.find((t) => t.paysCardId === card.id && t.invoiceDate === dueDate) ?? null;
+    const total = sum(g.items.map((e) => -signed(e.kind, e.amount)));
+    const partial = !!payment && payment.amount < total;
+    const status: InvoiceStatus = payment
+      ? partial
+        ? 'parcial'
+        : 'paga'
+      : todayDate <= g.closingDate
+        ? 'aberta'
+        : 'fechada';
+    out.push({ card, closingDate: g.closingDate, dueDate, items: g.items.sort(compareEntries), total, payment, status });
+
+    if (partial) {
+      // pagou só uma parte: o restante (+ juros e iof estimados) entra na próxima fatura.
+      const remaining = total - payment!.amount;
+      const nextClosing = closingDateIn(card, addMonths(monthOf(g.closingDate), 1));
+      const nextDue = dueDateFor(card, nextClosing);
+      let next = groups.get(nextDue);
+      if (!next) {
+        next = { closingDate: nextClosing, items: [] };
+        groups.set(nextDue, next);
+        dues.splice(i + 1, 0, nextDue);
+        dues.sort();
+      }
+      next.items.push({
+        key: `s:${card.id}:${nextDue}`,
+        kind: 'despesa',
+        amount: remaining,
+        description: 'saldo da fatura anterior',
+        categoryId: null,
+        date: dueDate,
+        originalDate: dueDate,
+        source: 'pendente',
+        overdue: false,
+        cardId: card.id,
+      });
+      if (card.revolvingRate != null) {
+        const est = estimateRevolving(remaining, card.revolvingRate);
+        next.items.push({
+          key: `j:${card.id}:${nextDue}`,
+          kind: 'despesa',
+          amount: est.cost,
+          description: 'juros e iof do rotativo (estimativa)',
+          categoryId: null,
+          date: dueDate,
+          originalDate: dueDate,
+          source: 'prevista',
+          overdue: false,
+          cardId: card.id,
+        });
+      }
+    }
+  }
+  return out;
 }
 
 /** uma fatura específica (pelo vencimento), mesmo sem compras. */
