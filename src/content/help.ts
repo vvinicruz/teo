@@ -109,7 +109,6 @@ export const HELP_TOPICS: HelpTopic[] = [
     paragraphs: [
       'se você paga menos que o total (o mínimo, por exemplo), o que falta vai para a próxima fatura no crédito rotativo, que tem um dos juros mais altos do mercado.',
       'o teo avisa na hora quanto isso pode custar, usando a taxa da sua fatura ou a média do seu banco no banco central. e já coloca o valor na próxima fatura pra você se planejar.',
-      'se não der pra pagar tudo, parcelar a fatura costuma sair mais barato. vale conferir no app do banco.',
     ],
   },
   {

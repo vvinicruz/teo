@@ -66,7 +66,6 @@ export default function CartaoDetalhe() {
 
   // juros do rotativo: a taxa informada no cartão ou a média do banco no banco central.
   const bcbRotativo = rates ? rateFor(rates, card.bankCode, 'rotativo') : null;
-  const bcbParcelado = rates ? rateFor(rates, card.bankCode, 'parcelado') : null;
   const rate = card.revolvingRate ?? bcbRotativo?.monthly ?? null;
   const rateOrigin =
     card.revolvingRateSource === 'fatura' && card.revolvingRate != null
@@ -163,7 +162,7 @@ export default function CartaoDetalhe() {
             <Text variant="small" color={colors.attention} style={{ flex: 1 }}>
               faltaram {formatMoney(partialInvoice)}, que foram para a próxima fatura
               {partialEstimate ? ` com cerca de ${formatMoney(partialEstimate.cost)} de juros e iof (estimativa)` : ' com juros do rotativo'}
-              . se puder, vale quitar antes do próximo vencimento.
+              .
             </Text>
           </View>
         ) : null}
@@ -238,11 +237,6 @@ export default function CartaoDetalhe() {
                   {estimate && rate != null
                     ? `, com juros de cerca de ${formatRate(rate)} ao mês + iof. isso dá uns ${formatMoney(estimate.cost)} a mais (${rateOrigin}).`
                     : ', que costuma ter os juros mais altos do mercado.'}
-                </Text>
-                <Text variant="small" color={colors.textSoft}>
-                  {bcbParcelado && bcbParcelado.monthly < (rate ?? Infinity)
-                    ? `se não der para pagar tudo, parcelar a fatura costuma sair mais barato (média de ${formatRate(bcbParcelado.monthly)} ao mês). vale conferir no app do banco.`
-                    : 'se não der para pagar tudo, vale conferir no app do banco se parcelar a fatura sai mais barato.'}
                 </Text>
               </View>
             </View>

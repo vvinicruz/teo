@@ -9,7 +9,6 @@ const BASE =
   'https://olinda.bcb.gov.br/olinda/servico/taxaJuros/versao/v2/odata/TaxasJurosDiariaPorInicioPeriodo';
 const MODALITIES = {
   rotativo: 'Cartão de crédito - rotativo total - Prefixado',
-  parcelado: 'Cartão de crédito - parcelado - Prefixado',
 } as const;
 type Modality = keyof typeof MODALITIES;
 
@@ -23,11 +22,10 @@ export interface RateTable {
   periodStart: string;
   periodEnd: string;
   rotativo: BankRate[];
-  parcelado: BankRate[];
   fetchedAt: number;
 }
 
-const CACHE_KEY = 'teo:bcb-taxas-cartao:v1';
+const CACHE_KEY = 'teo:bcb-taxas-cartao:v2';
 const ONE_DAY = 24 * 60 * 60 * 1000;
 let memory: RateTable | null = null;
 let inflight: Promise<RateTable | null> | null = null;
@@ -68,8 +66,8 @@ async function fetchTable(): Promise<RateTable> {
       monthly: Number(x.TaxaJurosAoMes),
     }));
   };
-  const [rotativo, parcelado] = await Promise.all([load('rotativo'), load('parcelado')]);
-  return { periodStart, periodEnd, rotativo, parcelado, fetchedAt: Date.now() };
+  const rotativo = await load('rotativo');
+  return { periodStart, periodEnd, rotativo, fetchedAt: Date.now() };
 }
 
 /** tabela de taxas (do cache de até 1 dia, ou buscada agora). null se não der para buscar. */
