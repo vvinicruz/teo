@@ -11,7 +11,7 @@ import {
 import { today } from '../domain/dates';
 import { emptySnapshot } from '../domain/defaults';
 import type { Entry } from '../domain/finance';
-import type { ImportRow } from '../domain/importer';
+import { fitDescription, type ImportRow } from '../domain/importer';
 import type {
   Budget,
   Card,
@@ -225,11 +225,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
       },
 
       async addTransaction(t) {
-        const item: Transaction = { ...t, id: newId(), createdAt: nowIso() };
+        const item: Transaction = { ...t, description: fitDescription(t.description), id: newId(), createdAt: nowIso() };
         await upsert('transactions', item);
         return item;
       },
-      updateTransaction: (t) => upsert('transactions', t),
+      updateTransaction: (t) => upsert('transactions', { ...t, description: fitDescription(t.description) }),
       deleteTransaction: (id) => remove('transactions', id),
 
       async confirmEntry(entry, opts = {}) {
@@ -282,10 +282,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
             items.push({
               id: newId(),
               kind: row.kind,
-              description: row.description,
+              description: fitDescription(row.description),
               categoryId: row.categoryId,
               status: 'realizada',
-              paymentMethod: cardId ? 'credito' : null,
+              paymentMethod: cardId ? 'credito' : (row.line.method ?? null),
               cardId,
               createdAt: now,
               ...fromStatement,

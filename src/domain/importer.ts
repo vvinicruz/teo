@@ -10,7 +10,7 @@
 import { addDays, daysInclusive, lastDay, monthOf, type ISODate } from './dates';
 import { cardInvoices, upcomingEntries, recurrenceOccurrences, type Entry } from './finance';
 import { formatMoney, parseMoney, type Cents } from './money';
-import type { Card, Category, Kind, Snapshot, Transaction } from './types';
+import type { Card, Category, Kind, PaymentMethod, Snapshot, Transaction } from './types';
 
 export interface StatementLine {
   date: ISODate;
@@ -18,6 +18,8 @@ export interface StatementLine {
   amount: Cents;
   description: string;
   externalId: string | null;
+  /** forma de pagamento percebida pela descrição (pix, débito...). */
+  method?: PaymentMethod | null;
 }
 
 export interface ParsedStatement {
@@ -40,18 +42,57 @@ export function decodeBytes(bytes: Uint8Array): string {
   }
 }
 
-/** prefixos que os bancos colocam e que não ajudam a entender o gasto. */
-const NOISE = /^(compra (no |com )?(cartao de )?(debito|débito|credito|crédito)|compra cartao|compra (no )?pix|pagamento (via |com )?pix|pix (enviado|recebido)|transferencia (enviada|recebida)|transferência (enviada|recebida))\s*[-–:]\s*/i;
+/** limite de tamanho da descrição (o mesmo do banco de dados). */
+export const MAX_DESCRIPTION = 80;
 
-const clean = (s: string) => {
-  const base = s
+/** corta um texto no limite, sem deixar espaço no fim. */
+export function fitDescription(s: string): string {
+  const t = s.trim();
+  return t.length <= MAX_DESCRIPTION ? t : `${t.slice(0, MAX_DESCRIPTION - 1).trimEnd()}…`;
+}
+
+/** prefixos que os bancos colocam e o que eles dizem sobre a forma de pagamento. */
+const PREFIXES: [RegExp, PaymentMethod | null][] = [
+  [/^transfer[eê]ncia (enviada|recebida)( pelo pix)?/i, 'pix'],
+  [/^pix (enviado|recebido)/i, 'pix'],
+  [/^(compra (no |com )?|pagamento (via |com |no )?)pix/i, 'pix'],
+  [/^compra (no |com )?(cart[aã]o de )?d[eé]bito( via nupay)?/i, 'debito'],
+  [/^compra (no |com )?(cart[aã]o de )?cr[eé]dito/i, 'credito'],
+  [/^compra cart[aã]o/i, null],
+  [/^pagamento de boleto( efetuado)?/i, 'boleto'],
+  [/^(ted|doc|transfer[eê]ncia)( enviada| recebida)?/i, 'transferencia'],
+];
+
+/** pedaços que só trazem dados do banco (cpf/cnpj mascarados, agência, conta...). */
+const BANK_DETAILS = /•|\*\*\*|\d{2,3}\.\d{3}\.\d{3}|\/0001|ag[eê]ncia|conta:|\(\d{3,4}\)|institui[cç][aã]o de pagamento|\bs\.?a\.?$/i;
+
+/** limpa a descrição do extrato e descobre a forma de pagamento, quando dá. */
+export function cleanDescription(raw: string): { description: string; method: PaymentMethod | null } {
+  const base = raw
     .replace(/&amp;/gi, '&')
     .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase();
-  const stripped = base.replace(NOISE, '').trim();
-  return stripped || base;
-};
+  let rest = base;
+  let method: PaymentMethod | null = null;
+  for (const [re, m] of PREFIXES) {
+    const match = rest.match(re);
+    if (match) {
+      method = m;
+      rest = rest.slice(match[0].length).replace(/^\s*[-–:]\s*/, '');
+      break;
+    }
+  }
+  // fica com os pedaços até aparecer o primeiro com dados do banco.
+  const parts = rest.split(/\s+[-–]\s+/);
+  const kept: string[] = [];
+  for (const part of parts) {
+    if (BANK_DETAILS.test(part)) break;
+    kept.push(part);
+  }
+  const description = fitDescription(kept.join(' - ').trim() || base);
+  return { description, method };
+}
 
 const normalize = (s: string) =>
   s
@@ -75,9 +116,9 @@ export function parseOFX(text: string): ParsedStatement {
     const date = ofxDate(field('DTPOSTED'));
     const amount = parseMoney(field('TRNAMT'));
     if (!date || amount === null || amount === 0) continue;
-    const description = clean(field('MEMO') || field('NAME') || field('PAYEE') || 'movimentação');
+    const { description, method } = cleanDescription(field('MEMO') || field('NAME') || field('PAYEE') || 'movimentação');
     const fitId = field('FITID');
-    lines.push({ date, amount, description, externalId: fitId ? `ofx:${fitId}` : null });
+    lines.push({ date, amount, description, method, externalId: fitId ? `ofx:${fitId}` : null });
   }
   return { format: 'ofx', lines, looksLikeCard };
 }
@@ -139,12 +180,8 @@ export function parseCSV(text: string): ParsedStatement {
     const amount = parseMoney(cols[iAmount] ?? '');
     if (!date || amount === null || amount === 0) continue;
     const id = iId >= 0 ? cols[iId] : '';
-    lines.push({
-      date,
-      amount,
-      description: clean((iDesc >= 0 ? cols[iDesc] : '') || 'movimentação'),
-      externalId: id ? `csv:${id}` : null,
-    });
+    const { description, method } = cleanDescription((iDesc >= 0 ? cols[iDesc] : '') || 'movimentação');
+    lines.push({ date, amount, description, method, externalId: id ? `csv:${id}` : null });
   }
   // fatura de cartão em csv (ex.: nubank "date,title,amount") lista compras como valores positivos.
   const positives = lines.filter((l) => l.amount > 0).length;

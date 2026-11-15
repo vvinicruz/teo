@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildImportRows, decodeBytes, guessCategory, parseCSV, parseOFX, parseStatement } from '../importer';
+import { buildImportRows, cleanDescription, decodeBytes, guessCategory, parseCSV, parseOFX, parseStatement } from '../importer';
 import type { Card, Category, Snapshot, Transaction } from '../types';
 
 const TODAY = '2026-11-14';
@@ -75,10 +75,10 @@ describe('leitura de extratos', () => {
   it('ofx de conta (sgml, vírgula e ponto, memo e name)', () => {
     const st = parseOFX(OFX_CONTA);
     expect(st.looksLikeCard).toBe(false);
-    expect(st.lines).toEqual([
-      { date: '2026-11-12', amount: -12000, description: 'supermercado bom preco', externalId: 'ofx:A1' },
+    expect(st.lines).toMatchObject([
+      { date: '2026-11-12', amount: -12000, description: 'supermercado bom preco', externalId: 'ofx:A1', method: 'debito' },
       { date: '2026-11-05', amount: 560000, description: 'pagto salario empresa x', externalId: 'ofx:A2' },
-      { date: '2026-11-13', amount: -150000, description: 'pix enviado aluguel apto', externalId: 'ofx:A3' },
+      { date: '2026-11-13', amount: -150000, description: 'aluguel apto', externalId: 'ofx:A3', method: 'pix' },
     ]);
   });
   it('ofx de cartão (xml)', () => {
@@ -94,7 +94,7 @@ describe('leitura de extratos', () => {
   it('csv da conta nubank (data brasileira, identificador)', () => {
     const st = parseCSV(CSV_NUBANK_CONTA);
     expect(st.looksLikeCard).toBe(false);
-    expect(st.lines[0]).toEqual({ date: '2026-11-12', amount: -12000, description: 'padaria', externalId: 'csv:abc-1' });
+    expect(st.lines[0]).toMatchObject({ date: '2026-11-12', amount: -12000, description: 'padaria', externalId: 'csv:abc-1', method: 'debito' });
   });
   it('csv com ponto e vírgula', () => {
     const st = parseCSV('Data;Histórico;Valor\n01/11/2026;Farmácia;-35,90');
@@ -103,6 +103,16 @@ describe('leitura de extratos', () => {
   it('tira prefixos do banco mas mantém o resto', () => {
     const st = parseCSV('Data,Valor,Descrição\n01/11/2026,-10,Transferência recebida - João\n01/11/2026,-5,PIX ENVIADO');
     expect(st.lines.map((l) => l.description)).toEqual(['joão', 'pix enviado']);
+  });
+  it('extrato do nubank: tira cpf, banco, agência e conta, e respeita o limite de 80 caracteres', () => {
+    const memo =
+      'Transferência enviada pelo Pix - JULIANE MARTINS LOBATO DA SILVA - •••.123.456-•• - NU PAGAMENTOS S.A. - INSTITUIÇÃO DE PAGAMENTO (0260) Agência: 1 Conta: 12345678-9';
+    expect(cleanDescription(memo)).toEqual({ description: 'juliane martins lobato da silva', method: 'pix' });
+    expect(cleanDescription('Transferência enviada pelo Pix - UBER DO BRASIL TECNOLOGIA LTDA. - 17.895.646/0001-87 - BCO DO BRASIL S.A. (0001) Agência: 1 Conta: 2-3').description).toBe('uber do brasil tecnologia ltda.');
+    expect(cleanDescription('Transferência Recebida - FULANO DE TAL - •••.222.333-•• - BCO X (0001)')).toEqual({ description: 'fulano de tal', method: 'pix' });
+    expect(cleanDescription('Pagamento de boleto efetuado - CONDOMINIO EDIFICIO SOL').description).toBe('condominio edificio sol');
+    const longo = cleanDescription('x'.repeat(200)).description;
+    expect(longo.length).toBeLessThanOrEqual(80);
   });
   it('arquivo em latin-1 não quebra os acentos', () => {
     const bytes = Uint8Array.from([0x63, 0x61, 0x66, 0xe9]); // "café" em latin-1
