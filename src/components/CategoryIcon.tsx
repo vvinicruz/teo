@@ -18,6 +18,7 @@ import {
   Music,
   PawPrint,
   PiggyBank,
+  Receipt,
   Plane,
   Shirt,
   ShoppingBag,
@@ -65,6 +66,7 @@ export const CATEGORY_ICONS: Record<string, LucideIcon> = {
   reserva: PiggyBank,
   meta: Target,
   cartao: CreditCard,
+  impostos: Receipt,
   outros: Ellipsis,
 };
 

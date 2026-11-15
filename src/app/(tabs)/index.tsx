@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { Check, ChevronRight, Eye, EyeOff, LifeBuoy, SlidersHorizontal } from 'lucide-react-native';
+import { Check, ChevronRight, Eye, EyeOff, LifeBuoy, SlidersHorizontal, X } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import {
@@ -39,6 +39,8 @@ import { formatMoney } from '../../domain/money';
 import type { Goal } from '../../domain/types';
 import { useCategories } from '../../hooks/useCategories';
 import { useGoalNudge } from '../../hooks/useGoalNudge';
+import { useIrpf } from '../../hooks/useIrpf';
+import { irpfStatus, reminderKey, shouldRemind } from '../../domain/irpf';
 import { openEntry } from '../../lib/navigation';
 import { useToday } from '../../hooks/useToday';
 import { colors, radius, space } from '../../theme';
@@ -93,6 +95,9 @@ export default function Inicio() {
   const hide = data.settings.hideValues;
 
   const { nudge, dismiss } = useGoalNudge();
+  const irpf = useIrpf();
+  const irpfNow = irpfStatus(todayDate);
+  const irpfReminder = irpf.loaded && shouldRemind(irpfNow) && !irpf.isDismissed(reminderKey(irpfNow)) ? irpfNow : null;
   const [moving, setMoving] = useState<Goal | null>(null);
 
   const confirm = async (e: Entry) => {
@@ -234,6 +239,19 @@ export default function Inicio() {
           </Text>
         </Pressable>
       </FadeIn>
+
+      {irpfReminder ? (
+        <Card tone="cream" onPress={() => router.push('/imposto')} style={styles.irpf}>
+          <CategoryIcon icon="impostos" size={40} tone="primary" />
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text variant="bodyStrong">{irpfReminder.title}</Text>
+            <Text variant="small" color={colors.textSoft}>
+              {irpfReminder.message}
+            </Text>
+          </View>
+          <IconButton icon={X} label="dispensar aviso" size={18} color={colors.textFaint} onPress={() => irpf.dismiss(reminderKey(irpfReminder))} />
+        </Card>
+      ) : null}
 
       {nudge ? (
         <View style={{ marginTop: space.sm }}>
@@ -419,6 +437,7 @@ const styles = StyleSheet.create({
   mood: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.lg, paddingHorizontal: space.xs },
   list: { paddingHorizontal: space.lg, paddingVertical: space.xs },
   budgetHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
+  irpf: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md, padding: space.lg, marginTop: space.sm },
   helpLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: space.xxl },
   cardRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
   cardRowSep: { borderBottomWidth: 1, borderBottomColor: colors.line },

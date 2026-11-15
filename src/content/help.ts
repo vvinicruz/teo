@@ -161,6 +161,18 @@ export const HELP_TOPICS: HelpTopic[] = [
     action: { label: 'ver caixinhas', href: '/guardado' },
   },
   {
+    id: 'imposto',
+    icon: 'impostos',
+    title: 'imposto de renda',
+    summary: 'descubra se precisa declarar e se prepare com calma.',
+    paragraphs: [
+      'responda algumas perguntas e o teo diz se você é obrigado a declarar, com o motivo explicado.',
+      'marque sua situação (carteira assinada, aluguel, saúde, filhos...) e o teo monta a lista de documentos para você ir separando.',
+      'conforme o prazo chega, o teo avisa na tela inicial. a declaração em si é feita no app ou site oficial da receita.',
+    ],
+    action: { label: 'abrir imposto de renda', href: '/imposto' },
+  },
+  {
     id: 'esconder',
     icon: 'celular',
     title: 'esconder os valores',
