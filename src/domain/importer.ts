@@ -235,6 +235,99 @@ export function parseCardPdf(textLines: string[]): ParsedStatement {
   return { format: 'pdf', lines, looksLikeCard: true, invoiceDueDate };
 }
 
+// ---------- extrato de conta em pdf (itaú, nubank, bradesco, bb...) ----------
+
+const MONTHS_PT: Record<string, number> = {
+  jan: 1, fev: 2, mar: 3, abr: 4, mai: 5, jun: 6, jul: 7, ago: 8, set: 9, out: 10, nov: 11, dez: 12,
+};
+const MONEY = /(-\s?|\+\s?)?(?:R\$\s?)?(\d{1,3}(?:\.\d{3})*,\d{2})(\s?[-DC](?![a-z]))?(?![\d,])/gi;
+const ACCOUNT_SKIP = /saldo|^total|resumo|lan[cç]amentos futuros|per[ií]odo|ag[eê]ncia|^conta\b|extrato|limite/i;
+const OUT_WORDS = /enviad|pagamento|compra|saque|d[eé]bito|tarifa|pix env|transf(er[eê]ncia)? env|boleto|aplica[cç][aã]o/i;
+const IN_WORDS = /recebid|dep[oó]sito|sal[aá]rio|cr[eé]dito|estorno|rendimento|resgate|devolu/i;
+
+/** encontra uma data no começo da linha e devolve a data e o resto do texto. */
+function leadingDate(line: string, fallbackYear: number): { date: ISODate; rest: string } | null {
+  let m = line.match(/^(\d{2})\/(\d{2})\/(\d{2,4})\s*(.*)$/);
+  if (m) {
+    const year = m[3].length === 2 ? `20${m[3]}` : m[3];
+    return { date: `${year}-${m[2]}-${m[1]}`, rest: m[4] };
+  }
+  m = line.match(/^(\d{1,2})\s+(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)[a-z]*\.?\s*(\d{4})?\s*(.*)$/i);
+  if (m) {
+    const month = MONTHS_PT[m[2].toLowerCase()];
+    const year = m[3] ? Number(m[3]) : fallbackYear;
+    return { date: `${year}-${String(month).padStart(2, '0')}-${m[1].padStart(2, '0')}`, rest: m[4] };
+  }
+  m = line.match(/^(\d{2})\/(\d{2})\s+(.*)$/);
+  if (m) return { date: `${fallbackYear}-${m[2]}-${m[1]}`, rest: m[3] };
+  return null;
+}
+
+/**
+ * lê um extrato de conta em pdf. aceita linhas com data ("12/03/2026 pix enviado ... -50,00 1.200,00")
+ * e datas que agrupam várias linhas ("01 nov 2026" e, abaixo, os lançamentos do dia).
+ * quando há duas quantias na linha, a primeira é o valor e a segunda, o saldo.
+ */
+export function parseAccountPdf(textLines: string[], todayDate: ISODate): ParsedStatement {
+  const years = textLines.join(' ').match(/\b20\d{2}\b/g) ?? [];
+  const counts = new Map<number, number>();
+  for (const y of years) counts.set(Number(y), (counts.get(Number(y)) ?? 0) + 1);
+  const fallbackYear = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? Number(todayDate.slice(0, 4));
+
+  const lines: StatementLine[] = [];
+  const seen = new Map<string, number>();
+  let currentDate: ISODate | null = null;
+  let section: 1 | -1 | 0 = 0; // +1 entradas, -1 saídas (extratos que separam por seção)
+
+  for (const raw of textLines) {
+    let text = raw.trim();
+    const dated = leadingDate(text, fallbackYear);
+    if (dated) {
+      currentDate = dated.date;
+      text = dated.rest.trim();
+    }
+    const lower = normalize(text);
+    if (/total de entradas|entradas\b|cr[eé]ditos\b/.test(lower) && !/sa[ií]das/.test(lower)) section = 1;
+    if (/total de sa[ií]das|sa[ií]das\b|d[eé]bitos\b/.test(lower)) section = -1;
+    if (!currentDate || !text) continue;
+
+    const money = [...text.matchAll(MONEY)];
+    if (!money.length) continue;
+    const first = money[0];
+    const description = text.slice(0, first.index).replace(/[\s|]+$/, '').trim();
+    if (!description || ACCOUNT_SKIP.test(description)) continue;
+
+    const cents = parseMoney(first[2]);
+    if (!cents) continue;
+    const prefix = (first[1] ?? '').trim();
+    const suffix = (first[3] ?? '').trim().toUpperCase();
+    let sign: 1 | -1;
+    if (prefix === '-' || suffix === '-' || suffix === 'D') sign = -1;
+    else if (prefix === '+' || suffix === 'C') sign = 1;
+    else if (section !== 0) sign = section;
+    else if (IN_WORDS.test(normalize(description)) && !OUT_WORDS.test(normalize(description))) sign = 1;
+    else sign = -1;
+
+    const { description: clean, method } = cleanDescription(description);
+    const amount = sign * cents;
+    const base = `pdfc:${currentDate}:${clean}:${amount}`;
+    const n = (seen.get(base) ?? 0) + 1;
+    seen.set(base, n);
+    lines.push({ date: currentDate, amount, description: clean, method, externalId: `${base}:${n}` });
+  }
+  return { format: 'pdf', lines, looksLikeCard: false };
+}
+
+/** decide se o pdf é fatura de cartão ou extrato de conta, e lê do jeito certo. */
+export function parsePdfStatement(textLines: string[], todayDate: ISODate, preferCard: boolean): ParsedStatement {
+  const text = normalize(textLines.join(' '));
+  const looksCard = /fatura|cartao de credito|pagamento minimo|limite de credito|limite disponivel|vencimento/.test(text);
+  const card = parseCardPdf(textLines);
+  const account = parseAccountPdf(textLines, todayDate);
+  if (preferCard || looksCard) return card.lines.length ? card : account;
+  return account.lines.length ? account : card;
+}
+
 export function parseStatement(text: string): ParsedStatement {
   return /<OFX>|OFXHEADER/i.test(text) ? parseOFX(text) : parseCSV(text);
 }
@@ -297,6 +390,23 @@ export interface ImportRow {
   suggestion: Suggestion | null;
   /** null = a pessoa ainda precisa responder a pergunta. */
   decision: Decision | null;
+  /** compra parcelada percebida pela descrição (ex.: "loja 06/10"). */
+  installment: { n: number; total: number; base: string } | null;
+  /** lançar também as outras parcelas? */
+  installmentChoice: InstallmentChoice;
+}
+
+export type InstallmentChoice = 'so-esta' | 'proximas' | 'todas';
+
+/** "loja x 06/10", "loja parc 6/10", "loja 6 de 10" → parcela 6 de 10. */
+export function detectInstallment(description: string): { n: number; total: number; base: string } | null {
+  const m = description.match(/^(.*?)[\s-]*(?:parc(?:ela)?\.?\s*)?(\d{1,2})\s*(?:\/|de)\s*(\d{1,2})\s*$/i);
+  if (!m) return null;
+  const n = Number(m[2]);
+  const total = Number(m[3]);
+  if (total < 2 || total > 48 || n < 1 || n > total) return null;
+  const base = m[1].trim();
+  return base ? { n, total, base } : null;
 }
 
 const INVOICE_PAYMENT_RE = /fatura|pagamento (de )?cart|pgto cart|pag cart|cartao de credito|pagto cartao/;
@@ -340,10 +450,10 @@ export function buildImportRows(
   }
   const used = new Set<string>(); // lançamentos/previsões já "casados" com uma linha
   const importedIds = new Set(s.transactions.map((t) => t.externalId).filter(Boolean));
-  // no cartão, compara só com o mesmo cartão. nas contas, compara com qualquer conta: a pessoa
-  // pode ter registrado sem escolher a conta certa.
+  // compara com o mesmo cartão e também com o que foi lançado nas contas: a pessoa pode ter
+  // registrado a compra sem escolher o cartão (ou a conta) certo. outros cartões ficam de fora.
   const sameDestination = s.transactions.filter(
-    (t) => (t.cardId ?? null) === cardId && !t.paysCardId && !t.transferId && !t.investmentId,
+    (t) => (!t.cardId || t.cardId === cardId) && !t.paysCardId && !t.transferId && !t.investmentId,
   );
 
   const lastDate = statement.lines.reduce((m, l) => (l.date > m ? l.date : m), todayDate);
@@ -381,6 +491,8 @@ export function buildImportRows(
       categoryId: guessCategory(line.description, kind, s.categories),
       suggestion: null,
       decision: 'importar',
+      installment: kind === 'despesa' ? detectInstallment(line.description) : null,
+      installmentChoice: 'so-esta',
     };
     const d = normalize(line.description);
 

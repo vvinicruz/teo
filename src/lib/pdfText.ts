@@ -64,7 +64,7 @@ export async function pdfLines(bytes: Uint8Array): Promise<string[]> {
     const { items } = await page.getTextContent();
     out.push(
       ...buildLines(
-        items.map((it) => ({ str: it.str, x: it.transform[4], y: it.transform[5], w: it.width, size: Math.abs(it.transform[0]) || 10 })),
+        items.map((it) => ({ str: it.str, x: it.transform[4], y: it.transform[5], w: it.width, size: Math.hypot(it.transform[0], it.transform[1]) || 10 })),
       ),
     );
   }

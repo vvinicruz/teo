@@ -102,6 +102,11 @@ export function recurrenceOccurrences(
   return out;
 }
 
+/** número da ocorrência (1, 2, 3...) num mês. */
+export function occurrenceIndex(rec: Recurrence, month: MonthKey): number {
+  return monthIndex(month) - monthIndex(rec.startMonth) + 1;
+}
+
 /** última data em que a recorrência ocorre, ou null se não tiver fim. */
 export function recurrenceEnd(rec: Recurrence): ISODate | null {
   if (!rec.occurrences) return null;

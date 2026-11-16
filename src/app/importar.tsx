@@ -8,6 +8,7 @@ import {
   Card,
   CategoryIcon,
   CategoryPicker,
+  Chip,
   DestinationPicker,
   type Destination,
   Icon,
@@ -26,11 +27,12 @@ import { friendlyDate, shortDate } from '../domain/dates';
 import {
   buildImportRows,
   decodeBytes,
-  parseCardPdf,
+  parsePdfStatement,
   parseStatement,
   suggestionText,
   type Decision,
   type ImportRow,
+  type InstallmentChoice,
   type ParsedStatement,
 } from '../domain/importer';
 import { useCategories } from '../hooks/useCategories';
@@ -72,10 +74,10 @@ export default function Importar() {
           setError('por enquanto, faturas em pdf só podem ser importadas pelo navegador (appteo.com.br).');
           return;
         }
-        st = parseCardPdf(await pdfLines(file.bytes));
+        st = parsePdfStatement(await pdfLines(file.bytes), todayDate, !!dest.cardId);
         if (!st.lines.length) {
           setError(
-            'não conseguimos reconhecer as compras desse pdf. se for uma fatura de cartão, manda um exemplo pra gente (contato@appteo.com.br) que a gente ensina o teo a ler.',
+            'não conseguimos reconhecer as movimentações desse pdf. manda um exemplo pra gente (contato@appteo.com.br) que a gente ensina o teo a ler esse banco.',
           );
           return;
         }
@@ -110,6 +112,8 @@ export default function Importar() {
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, decision } : r)));
   const setCategory = (key: string, categoryId: string | null) =>
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, categoryId } : r)));
+  const setInstallment = (key: string, installmentChoice: InstallmentChoice) =>
+    setRows((rs) => rs.map((r) => (r.key === key ? { ...r, installmentChoice } : r)));
   const setText = (key: string, patch: { description?: string; note?: string }) =>
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -187,7 +191,7 @@ export default function Importar() {
           <View style={styles.help}>
             <Icon as={Info} size={16} color={colors.textFaint} />
             <Text variant="small" color={colors.textFaint} style={{ flex: 1 }}>
-              {'aceitamos arquivos .ofx e .csv, e a fatura do cartão em .pdf. no app ou site do banco, procure por “exportar extrato” ou “baixar fatura”. o arquivo é lido aqui mesmo e não é enviado para lugar nenhum.'}
+              {'aceitamos .ofx, .csv e .pdf (extrato da conta ou fatura do cartão). no app ou site do banco, procure por “exportar extrato” ou “baixar fatura”. o arquivo é lido aqui mesmo e não é enviado para lugar nenhum.'}
             </Text>
           </View>
         </View>
@@ -228,6 +232,7 @@ export default function Importar() {
                   expanded={expanded === r.key}
                   onExpand={() => setExpanded(expanded === r.key ? null : r.key)}
                   onText={(patch) => setText(r.key, patch)}
+                  onInstallment={(c) => setInstallment(r.key, c)}
                   last={i === rows.length - 1}
                   categoryName={get(r.categoryId)?.name}
                   categoryIcon={get(r.categoryId)?.icon}
@@ -302,6 +307,7 @@ function ImportLine({
   expanded,
   onExpand,
   onText,
+  onInstallment,
   last,
   categoryName,
   categoryIcon,
@@ -312,6 +318,7 @@ function ImportLine({
   expanded: boolean;
   onExpand: () => void;
   onText: (patch: { description?: string; note?: string }) => void;
+  onInstallment: (c: InstallmentChoice) => void;
   last: boolean;
   categoryName?: string;
   categoryIcon?: string;
@@ -388,6 +395,30 @@ function ImportLine({
           ) : null}
           {note ? <Badge label={note} tone={row.decision === null ? 'atencao' : 'neutro'} /> : null}
         </View>
+        {row.installment && row.decision === 'importar' ? (
+          <View style={styles.installment}>
+            <Text variant="caption" color={colors.textSoft}>
+              parcela {row.installment.n} de {row.installment.total}. lançar também:
+            </Text>
+            <View style={styles.installmentChips}>
+              <Chip label="só esta" selected={row.installmentChoice === 'so-esta'} onPress={() => onInstallment('so-esta')} />
+              {row.installment.n < row.installment.total ? (
+                <Chip
+                  label={`as próximas (${row.installment.n + 1} a ${row.installment.total})`}
+                  selected={row.installmentChoice === 'proximas'}
+                  onPress={() => onInstallment('proximas')}
+                />
+              ) : null}
+              {row.installment.n > 1 ? (
+                <Chip
+                  label={`todas (1 a ${row.installment.total})`}
+                  selected={row.installmentChoice === 'todas'}
+                  onPress={() => onInstallment('todas')}
+                />
+              ) : null}
+            </View>
+          </View>
+        ) : null}
       </View>
       <Money value={income ? row.amount : -row.amount} sign={income} variant="smallStrong" color={income ? colors.income : colors.text} alwaysShow />
     </View>
@@ -405,6 +436,8 @@ const styles = StyleSheet.create({
   answers: { flexDirection: 'row', gap: space.sm, marginTop: space.xs },
   list: { paddingHorizontal: space.lg },
   editor: { gap: space.sm, marginTop: space.sm },
+  installment: { gap: 6, marginTop: space.sm, padding: space.sm, borderRadius: radius.md, backgroundColor: colors.cream },
+  installmentChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   line: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md, paddingVertical: space.md },
   lineSep: { borderBottomWidth: 1, borderBottomColor: colors.line },
   lineMeta: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' },

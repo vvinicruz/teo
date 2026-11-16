@@ -8,7 +8,8 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { today } from '../domain/dates';
+import { addDays, addMonths, monthOf, parseISODate, today } from '../domain/dates';
+import { occurrenceDate, occurrenceIndex, recurrenceOccurrences } from '../domain/finance';
 import { MAIN_ACCOUNT_NAME } from '../domain/types';
 import { emptySnapshot } from '../domain/defaults';
 import type { Entry } from '../domain/finance';
@@ -53,6 +54,12 @@ interface DataValue {
   addTransaction(t: NewTransaction): Promise<Transaction>;
   updateTransaction(t: Transaction): Promise<void>;
   deleteTransaction(id: string): Promise<void>;
+  /**
+   * apaga um lançamento que faz parte de uma conta fixa ou compra parcelada.
+   * só-esta: só este mês; proximas: este e os seguintes (a recorrência termina antes);
+   * anteriores: este e os anteriores; todas: tudo, inclusive a recorrência.
+   */
+  deleteInstallments(txId: string, mode: 'so-esta' | 'proximas' | 'anteriores' | 'todas'): Promise<void>;
   /** marca uma previsão (pendente ou ocorrência de recorrência) como realizada. */
   confirmEntry(entry: Entry, opts?: { amount?: number; date?: string }): Promise<void>;
   /** registra o pagamento de uma fatura (sai da conta e substitui a previsão). */
@@ -291,11 +298,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const { cardId, accountId } = dest;
         const now = nowIso();
         const items: Transaction[] = [];
+        const recurrences: Recurrence[] = [];
         for (const row of rows) {
-          // "é a mesma" num extrato de conta: o registro passa a ficar na conta do extrato.
-          if (row.decision === 'pular' && row.suggestion?.type === 'parecida' && !cardId) {
+          // "é a mesma": o registro passa a ficar onde o extrato diz (cartão ou conta).
+          if (row.decision === 'pular' && row.suggestion?.type === 'parecida') {
             const t = row.suggestion.transaction;
-            if ((t.accountId ?? null) !== accountId) items.push({ ...t, accountId });
+            if (cardId) {
+              if (t.cardId !== cardId) items.push({ ...t, cardId, accountId: null, status: 'realizada', paymentMethod: 'credito' });
+            } else if ((t.accountId ?? null) !== accountId) {
+              items.push({ ...t, accountId });
+            }
             continue;
           }
           const sug = row.suggestion;
@@ -306,7 +318,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             ...(row.note.trim() ? { note: row.note.trim().slice(0, 500) } : {}),
           };
           if (row.decision === 'importar') {
-            items.push({
+            const tx: Transaction = {
               id: newId(),
               kind: row.kind,
               description: fitDescription(row.description),
@@ -317,7 +329,50 @@ export function DataProvider({ children }: { children: ReactNode }) {
               accountId: cardId ? null : accountId,
               createdAt: now,
               ...fromStatement,
-            });
+            };
+            const inst = row.installment;
+            if (inst && row.installmentChoice !== 'so-esta') {
+              // compra parcelada: vira uma recorrência com o número de parcelas, e esta linha é a parcela n.
+              const thisMonth = monthOf(row.date);
+              const rec: Recurrence = {
+                id: newId(),
+                kind: row.kind,
+                amount: row.amount,
+                description: fitDescription(inst.base || row.description),
+                categoryId: row.categoryId,
+                paymentMethod: tx.paymentMethod,
+                dayOfMonth: parseISODate(row.date).day,
+                startMonth: addMonths(thisMonth, -(inst.n - 1)),
+                occurrences: inst.total,
+                skippedDates: [],
+                cardId,
+                accountId: cardId ? null : accountId,
+                createdAt: now,
+              };
+              const previous = recurrenceOccurrences(rec, `${rec.startMonth}-01`, addDays(`${thisMonth}-01`, -1));
+              if (row.installmentChoice === 'todas') {
+                // as anteriores entram no histórico como já pagas.
+                for (const occ of previous) {
+                  items.push({
+                    ...tx,
+                    id: newId(),
+                    date: occ.date,
+                    description: fitDescription(`${rec.description} ${occ.index}/${inst.total}`),
+                    externalId: null,
+                    note: null,
+                    recurrenceId: rec.id,
+                    occurrenceDate: occ.date,
+                  });
+                }
+              } else {
+                // só as próximas: as anteriores não aparecem como previstas.
+                rec.skippedDates = previous.map((o) => o.date);
+              }
+              recurrences.push(rec);
+              items.push({ ...tx, recurrenceId: rec.id, occurrenceDate: occurrenceDate(rec, thisMonth) });
+            } else {
+              items.push(tx);
+            }
           } else if (row.decision === 'vincular' && sug?.type === 'previsao') {
             const e = sug.entry;
             const existing = e.transactionId
@@ -363,9 +418,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
           (s) => {
             const byId = new Map(s.transactions.map((t) => [t.id, t]));
             for (const t of items) byId.set(t.id, t);
-            return { ...s, transactions: [...byId.values()] };
+            return { ...s, recurrences: [...s.recurrences, ...recurrences], transactions: [...byId.values()] };
           },
-          (r) => r.upsertMany('transactions', items),
+          async (r) => {
+            // as recorrências primeiro: os lançamentos apontam para elas.
+            if (recurrences.length) await r.upsertMany('recurrences', recurrences);
+            await r.upsertMany('transactions', items);
+          },
         );
         return items.length;
       },
@@ -457,6 +516,46 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
         await remove('cards', id);
         return 'removido';
+      },
+
+      async deleteInstallments(txId, mode) {
+        const s = dataRef.current;
+        const tx = s.transactions.find((t) => t.id === txId);
+        const rec = tx?.recurrenceId ? s.recurrences.find((r) => r.id === tx.recurrenceId) : undefined;
+        if (!tx || !rec) {
+          await remove('transactions', txId);
+          return;
+        }
+        const pivot = tx.occurrenceDate ?? tx.date;
+        const linked = s.transactions.filter((t) => t.recurrenceId === rec.id);
+        const occ = (t: Transaction) => t.occurrenceDate ?? t.date;
+        const toDelete =
+          mode === 'so-esta'
+            ? [tx]
+            : mode === 'proximas'
+              ? linked.filter((t) => occ(t) >= pivot)
+              : mode === 'anteriores'
+                ? linked.filter((t) => occ(t) <= pivot)
+                : linked;
+        for (const t of toDelete) await remove('transactions', t.id);
+
+        if (mode === 'todas') {
+          await remove('recurrences', rec.id);
+          return;
+        }
+        if (mode === 'proximas') {
+          // termina a recorrência no mês anterior a este.
+          const index = occurrenceIndex(rec, monthOf(pivot));
+          if (index <= 1) await remove('recurrences', rec.id);
+          else await upsert('recurrences', { ...rec, occurrences: index - 1 });
+          return;
+        }
+        // só esta / anteriores: as datas apagadas não voltam como previsão.
+        const dates =
+          mode === 'so-esta'
+            ? [pivot]
+            : recurrenceOccurrences(rec, `${rec.startMonth}-01`, pivot).map((o) => o.date);
+        await upsert('recurrences', { ...rec, skippedDates: [...new Set([...rec.skippedDates, ...dates])] });
       },
 
       async addRecurrence(r) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildImportRows, cleanDescription, decodeBytes, guessCategory, parseCardPdf, parseCSV, parseOFX, parseStatement } from '../importer';
+import { buildImportRows, cleanDescription, decodeBytes, detectInstallment, guessCategory, parseAccountPdf, parseCardPdf, parseCSV, parseOFX, parsePdfStatement, parseStatement } from '../importer';
 import type { Card, Category, Snapshot, Transaction } from '../types';
 
 const TODAY = '2026-11-14';
@@ -195,8 +195,13 @@ describe('perguntas sobre duplicidade', () => {
     expect(rows[1]).toMatchObject({ suggestion: { type: 'pagamento-no-cartao' }, decision: 'pular' });
     expect(rows[0].categoryId).toBe('c-ass');
   });
-  it('compra parecida em outro destino não é considerada duplicada', () => {
-    const s = base({ transactions: [tx({ amount: 5590, date: '2026-11-10', cardId: null })] });
+  it('na fatura, acha o gasto lançado na conta com mesmo valor e data, mesmo com outro nome', () => {
+    const s = base({ transactions: [tx({ amount: 5590, date: '2026-11-10', cardId: null, description: 'streaming' })] });
+    const rows = buildImportRows(s, parseOFX(OFX_CARTAO), { cardId: 'nu', accountId: null }, TODAY);
+    expect(rows[0].suggestion).toMatchObject({ type: 'parecida', sameDay: true });
+  });
+  it('compra em outro cartão não é considerada duplicada', () => {
+    const s = base({ cards: [nubank, { ...nubank, id: 'outro' }], transactions: [tx({ amount: 5590, date: '2026-11-10', cardId: 'outro' })] });
     const rows = buildImportRows(s, parseOFX(OFX_CARTAO), { cardId: 'nu', accountId: null }, TODAY);
     expect(rows[0].suggestion).toBeNull();
   });
@@ -238,5 +243,61 @@ describe('fatura em pdf', () => {
     const parcela = rows.find((r) => r.description.startsWith('loja'));
     expect(parcela?.date).toBe('2026-11-04');
     expect(rows.find((r) => r.description === 'pagamento efetuado')?.decision).toBe('pular');
+  });
+});
+
+describe('extrato de conta em pdf', () => {
+  it('itaú: data completa, valor com sinal e saldo na mesma linha', () => {
+    const st = parseAccountPdf(
+      [
+        'Extrato conta corrente | Período: 01/01/2026 a 31/12/2026',
+        '02/01/2026 SALDO ANTERIOR 1.500,00',
+        '05/01/2026 PIX TRANSF JOAO SILVA05/01 -120,00 1.380,00',
+        '05/01/2026 PAG BOLETO CONDOMINIO -450,00 930,00',
+        '06/01/2026 SALARIO EMPRESA X 5.600,00 6.530,00',
+        '06/01/2026 SALDO DO DIA 6.530,00',
+      ],
+      '2026-11-16',
+    );
+    expect(st.lines.map((l) => [l.date, l.description, l.amount])).toEqual([
+      ['2026-01-05', 'pix transf joao silva05/01', -12000],
+      ['2026-01-05', 'pag boleto condominio', -45000],
+      ['2026-01-06', 'salario empresa x', 560000],
+    ]);
+  });
+  it('nubank: data agrupando lançamentos e seções de entradas e saídas', () => {
+    const st = parseAccountPdf(
+      [
+        '01 NOV 2026 Total de entradas + 1.000,00',
+        'Transferência recebida pelo Pix FULANO DE TAL - •••.123.456-•• 1.000,00',
+        'Total de saídas - 70,50',
+        'Compra no débito PADARIA PAO QUENTE 20,50',
+        'Transferência enviada pelo Pix UBER DO BRASIL 50,00',
+      ],
+      '2026-11-16',
+    );
+    expect(st.lines.map((l) => [l.date, l.amount])).toEqual([
+      ['2026-11-01', 100000],
+      ['2026-11-01', -2050],
+      ['2026-11-01', -5000],
+    ]);
+  });
+  it('escolhe o leitor certo: fatura ou extrato', () => {
+    expect(parsePdfStatement(['Vencimento: 10/12/2026', '05/11 MERCADO 12,00'], '2026-11-16', false).looksLikeCard).toBe(true);
+    expect(parsePdfStatement(['05/11/2026 PIX ENVIADO MERCADO -12,00 100,00'], '2026-11-16', false).looksLikeCard).toBe(false);
+  });
+  it('sufixo D/C (bradesco e outros)', () => {
+    const st = parseAccountPdf(['10/03/2026 TARIFA PACOTE 39,90 D', '11/03/2026 DEPOSITO 200,00 C'], '2026-11-16');
+    expect(st.lines.map((l) => l.amount)).toEqual([-3990, 20000]);
+  });
+});
+
+describe('compras parceladas', () => {
+  it('percebe a parcela pela descrição', () => {
+    expect(detectInstallment('zp *olx anders 06/10')).toEqual({ n: 6, total: 10, base: 'zp *olx anders' });
+    expect(detectInstallment('magazine luiza parc 3/12')).toEqual({ n: 3, total: 12, base: 'magazine luiza' });
+    expect(detectInstallment('loja 2 de 5')).toEqual({ n: 2, total: 5, base: 'loja' });
+    expect(detectInstallment('pix 05/01')).toBeNull(); // 5 > 1: não é parcela
+    expect(detectInstallment('mercado')).toBeNull();
   });
 });

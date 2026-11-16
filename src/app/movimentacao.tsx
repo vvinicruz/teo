@@ -15,6 +15,7 @@ import {
   Pressable,
   Screen,
   Segmented,
+  Sheet,
   Text,
   TextField,
   useFeedback,
@@ -43,7 +44,7 @@ type RepeatMode = 'nao' | 'sempre' | 'parcelas';
 
 export default function Movimentacao() {
   const params = useLocalSearchParams<Params>();
-  const { data, addTransaction, updateTransaction, deleteTransaction, addRecurrence, skipOccurrence } = useData();
+  const { data, addTransaction, updateTransaction, deleteTransaction, deleteInstallments, addRecurrence, skipOccurrence } = useData();
   const { forKind, get } = useCategories();
   const { toast, confirm } = useFeedback();
   const todayDate = useToday();
@@ -84,6 +85,7 @@ export default function Movimentacao() {
   const [repeat, setRepeat] = useState<RepeatMode>('nao');
   const [installments, setInstallments] = useState('2');
   const [dateOpen, setDateOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -212,8 +214,34 @@ export default function Movimentacao() {
     }
   };
 
+  const removeSeries = async (mode: 'so-esta' | 'proximas' | 'anteriores' | 'todas') => {
+    if (!existing) return;
+    try {
+      await deleteInstallments(existing.id, mode);
+      toast(
+        mode === 'so-esta'
+          ? 'apagada só esta.'
+          : mode === 'proximas'
+            ? 'apagada esta e as próximas.'
+            : mode === 'anteriores'
+              ? 'apagada esta e as anteriores.'
+              : 'tudo apagado.',
+        'info',
+      );
+      setDeleteOpen(false);
+      close();
+    } catch {
+      toast('não conseguimos apagar agora. tenta de novo?', 'erro');
+    }
+  };
+
   const remove = async () => {
     if (!existing) return;
+    // faz parte de uma conta fixa ou compra parcelada: perguntamos o que apagar.
+    if (existing.recurrenceId && recurrence) {
+      setDeleteOpen(true);
+      return;
+    }
     const ok = await confirm({
       title: 'apagar esta movimentação?',
       message: existing.recurrenceId
@@ -472,6 +500,27 @@ export default function Movimentacao() {
           </Card>
         ) : null}
       </View>
+
+      <Sheet
+        visible={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        title={recurrence?.occurrences ? 'apagar parcela' : 'apagar lançamento'}
+      >
+        <View style={{ gap: space.sm }}>
+          <Text color={colors.textSoft} style={{ marginBottom: space.sm }}>
+            {recurrence?.occurrences
+              ? `“${recurrence.description}” tem ${recurrence.occurrences} parcelas. o que você quer apagar?`
+              : `“${recurrence?.description ?? ''}” se repete todo mês. o que você quer apagar?`}
+          </Text>
+          <Button label="só esta" variant="ghost" onPress={() => removeSeries('so-esta')} />
+          <Button label="esta e as próximas" variant="ghost" onPress={() => removeSeries('proximas')} />
+          <Button label="esta e as anteriores" variant="ghost" onPress={() => removeSeries('anteriores')} />
+          <Button label="todas" variant="danger" onPress={() => removeSeries('todas')} />
+          <Text variant="small" color={colors.textFaint} center style={{ marginTop: space.sm }}>
+            apagar não pode ser desfeito.
+          </Text>
+        </View>
+      </Sheet>
 
       <DatePickerSheet visible={dateOpen} value={date} onClose={() => setDateOpen(false)} onChange={(d) => {
         setDate(d);

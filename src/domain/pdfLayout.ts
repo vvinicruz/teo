@@ -21,7 +21,9 @@ const SPACE_GAP = 0.18;
 export function buildLines(pieces: TextPiece[]): string[] {
   const rows = new Map<number, TextPiece[]>();
   for (const p of pieces) {
-    if (!p.str) continue;
+    // pedaços feitos só de espaço são "espaços falsos" inseridos pelo leitor de pdf:
+    // ignoramos e decidimos os espaços pela distância real entre os pedaços.
+    if (!p.str.trim()) continue;
     const y = Math.round(p.y);
     const list = rows.get(y) ?? [];
     list.push(p);

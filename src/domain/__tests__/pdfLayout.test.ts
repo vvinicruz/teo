@@ -25,6 +25,12 @@ describe('pdf: linhas a partir de pedaços', () => {
     ]);
     expect(lines).toEqual(['02/11 SEG CARTAO PROTEGIDO 10,32', '06/11 IOF REFINANCIAMENTO DE 93,55', '16/09 ZP *OLX ANDERS 06/10 51,98']);
   });
+  it('ignora os "espaços falsos" que o leitor de pdf coloca entre os pedaços', () => {
+    const p = pieces(700, ['SEG CA', 'RTA', 'O PROTE', 'GIDO']);
+    // o pdf.js devolve um pedaço " " entre cada trecho colado
+    const withFake = p.flatMap((x, i) => (i ? [{ ...x, str: ' ', w: 0 }, x] : [x]));
+    expect(buildLines(withFake)).toEqual(['SEG CARTAO PROTEGIDO']);
+  });
   it('mantém o espaço entre palavras quando há um vão', () => {
     expect(buildLines(pieces(700, ['TIKTOK', 3, 'SHOP']))).toEqual(['TIKTOK SHOP']);
   });
