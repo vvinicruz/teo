@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { buildLines } from '../domain/pdfLayout';
+import type { TextPiece } from '../domain/pdfLayout';
 
 /**
  * extrai o texto de um pdf, linha por linha, usando o pdf.js (mozilla) hospedado no próprio
@@ -50,23 +50,23 @@ export function isPdf(bytes: Uint8Array): boolean {
   return bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46; // %PDF
 }
 
-/**
- * devolve as linhas de texto do pdf. itens na mesma altura viram uma linha, em ordem da
- * esquerda para a direita (duas colunas da fatura ficam na mesma linha; o leitor separa
- * cada compra pelo padrão "data descrição valor").
- */
-export async function pdfLines(bytes: Uint8Array): Promise<string[]> {
+/** pedaços de texto de cada página, com posição e tamanho (para ler tabelas e colunas). */
+export async function pdfPages(bytes: Uint8Array): Promise<TextPiece[][]> {
   const pdfjs = await loadPdfJs();
   const doc = await pdfjs.getDocument({ data: bytes }).promise;
-  const out: string[] = [];
+  const pages: TextPiece[][] = [];
   for (let p = 1; p <= doc.numPages; p++) {
     const page = await doc.getPage(p);
     const { items } = await page.getTextContent();
-    out.push(
-      ...buildLines(
-        items.map((it) => ({ str: it.str, x: it.transform[4], y: it.transform[5], w: it.width, size: Math.hypot(it.transform[0], it.transform[1]) || 10 })),
-      ),
+    pages.push(
+      items.map((it) => ({
+        str: it.str,
+        x: it.transform[4],
+        y: it.transform[5],
+        w: it.width,
+        size: Math.hypot(it.transform[0], it.transform[1]) || 10,
+      })),
     );
   }
-  return out;
+  return pages;
 }

@@ -237,6 +237,29 @@ describe('fatura em pdf', () => {
     expect(rows[0].suggestion).toMatchObject({ type: 'previsao', entry: { recurrenceId: 'r9', originalDate: '2026-11-25' } });
     expect(rows[0].decision).toBeNull();
   });
+  it('nome quebrado em duas linhas é juntado; categoria e cidade do itaú ficam de fora', () => {
+    const st = parseCardPdf([
+      'Vencimento: 21/10/2026',
+      '06/10 Pagamento débito -471,93',
+      'mínimo',
+      '02/10 SEG CARTAO 10,32',
+      'PROTEGIDO',
+      '13/05 ZP *OLX ANDERS 06/10 51,98',
+      'serviços SANTA BARBARA',
+      '12/10 ALEXANDRE MAYCON 20,00',
+      'RIBEIR',
+      'supermercado AMERICANA',
+      '20/08 TikTok Shop *T 02/03 28,23',
+      'outros',
+    ]);
+    expect(st.lines.map((l) => [l.description, l.amount])).toEqual([
+      ['pagamento débito mínimo', 47193],
+      ['seg cartao protegido', -1032],
+      ['zp *olx anders 06/10', -5198],
+      ['alexandre maycon ribeir', -2000],
+      ['tiktok shop *t 02/03', -2823],
+    ]);
+  });
   it('parcelas antigas caem no período da fatura; pagamento é pulado', () => {
     const card = { ...nubank, closingDay: 3, dueDay: 10 };
     const rows = buildImportRows(base({ cards: [card] }), parseCardPdf(linhas), { cardId: 'nu', accountId: null }, '2026-12-01');

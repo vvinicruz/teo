@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildLines, type TextPiece } from '../pdfLayout';
+import { buildLines, splitColumns, type TextPiece } from '../pdfLayout';
 
 /** monta pedaços colados (sem vão) ou com vão, como um pdf real. largura ≈ 6 por letra. */
 function pieces(y: number, parts: (string | number)[]): TextPiece[] {
@@ -37,5 +37,14 @@ describe('pdf: linhas a partir de pedaços', () => {
   it('ordena de cima para baixo e da esquerda para a direita', () => {
     const p = [...pieces(600, ['b']), ...pieces(700, ['a'])];
     expect(buildLines(p)).toEqual(['a', 'b']);
+  });
+});
+
+describe('pdf: fatura em duas colunas', () => {
+  it('separa as colunas mesmo quando a data vem grudada no nome', () => {
+    const left = [700, 680, 660, 640].map((y, i) => ({ str: `0${i + 1}/10 LOJA ${i}`, x: 23, y, w: 60, size: 10 }));
+    const right = [700, 680].map((y, i) => ({ str: `1${i}/10 OUTRA ${i}`, x: 303, y, w: 60, size: 10 }));
+    const cols = splitColumns([...left, ...right]);
+    expect(cols.map((c) => c.length)).toEqual([4, 2]);
   });
 });

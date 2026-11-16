@@ -27,7 +27,7 @@ import { friendlyDate, shortDate } from '../domain/dates';
 import {
   buildImportRows,
   decodeBytes,
-  parsePdfStatement,
+  parsePdfPages,
   parseStatement,
   suggestionText,
   type Decision,
@@ -37,7 +37,7 @@ import {
 } from '../domain/importer';
 import { useCategories } from '../hooks/useCategories';
 import { useToday } from '../hooks/useToday';
-import { isPdf, pdfLines, pdfSupported } from '../lib/pdfText';
+import { isPdf, pdfPages, pdfSupported } from '../lib/pdfText';
 import { pickStatementFile } from '../lib/statementFile';
 import { colors, radius, space } from '../theme';
 
@@ -74,7 +74,7 @@ export default function Importar() {
           setError('por enquanto, faturas em pdf só podem ser importadas pelo navegador (appteo.com.br).');
           return;
         }
-        st = parsePdfStatement(await pdfLines(file.bytes), todayDate, !!dest.cardId);
+        st = parsePdfPages(await pdfPages(file.bytes), todayDate, !!dest.cardId);
         if (!st.lines.length) {
           setError(
             'não conseguimos reconhecer as movimentações desse pdf. manda um exemplo pra gente (contato@appteo.com.br) que a gente ensina o teo a ler esse banco.',
