@@ -70,12 +70,24 @@ const PREFIXES: [RegExp, PaymentMethod | null][] = [
 const BANK_DETAILS = /•|\*\*\*|\d{2,3}\.\d{3}\.\d{3}|\/0001|ag[eê]ncia|conta:|\(\d{3,4}\)|institui[cç][aã]o de pagamento|\bs\.?a\.?$/i;
 
 /** limpa a descrição do extrato e descobre a forma de pagamento, quando dá. */
+/** "06/1 0" ou "0 6/10" (número da parcela quebrado pelo pdf) vira "06/10". */
+function fixSplitInstallment(text: string): string {
+  return text.replace(/(?:^|\s)(\d) ?(\d)? ?\/ ?(\d) ?(\d)?$/, (match, a: string, b = '', c: string, d = '') => {
+    const n = Number(a + b);
+    const total = Number(c + d);
+    if (!(b || d) || total < 2 || total > 48 || n < 1 || n > total) return match;
+    return ` ${(a + b).padStart(2, '0')}/${(c + d).padStart(2, '0')}`;
+  });
+}
+
 export function cleanDescription(raw: string): { description: string; method: PaymentMethod | null } {
-  const base = raw
-    .replace(/&amp;/gi, '&')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase();
+  const base = fixSplitInstallment(
+    raw
+      .replace(/&amp;/gi, '&')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase(),
+  ).trim();
   let rest = base;
   let method: PaymentMethod | null = null;
   for (const [re, m] of PREFIXES) {

@@ -260,6 +260,12 @@ describe('fatura em pdf', () => {
       ['tiktok shop *t 02/03', -2823],
     ]);
   });
+  it('número da parcela quebrado pelo pdf é consertado', () => {
+    expect(cleanDescription('ZP *OLX ANDERS 06/1 0').description).toBe('zp *olx anders 06/10');
+    expect(cleanDescription('LOJA 0 6/10').description).toBe('loja 06/10');
+    expect(detectInstallment(cleanDescription('ZP *OLX ANDERS 06/1 0').description)).toMatchObject({ n: 6, total: 10 });
+    expect(cleanDescription('posto 24/7').description).toBe('posto 24/7');
+  });
   it('parcelas antigas caem no período da fatura; pagamento é pulado', () => {
     const card = { ...nubank, closingDay: 3, dueDay: 10 };
     const rows = buildImportRows(base({ cards: [card] }), parseCardPdf(linhas), { cardId: 'nu', accountId: null }, '2026-12-01');

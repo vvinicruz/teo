@@ -24,6 +24,7 @@ import {
 } from '../components';
 import { useData } from '../data/DataProvider';
 import { friendlyDate, shortDate } from '../domain/dates';
+import { maskedLayout } from '../domain/pdfLayout';
 import {
   buildImportRows,
   decodeBytes,
@@ -57,6 +58,8 @@ export default function Importar() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<ImportRow | null>(null);
+  /** detalhes técnicos do último pdf lido (sem nomes nem valores), para ajudar a ensinar o teo a ler um banco novo. */
+  const [pdfLayout, setPdfLayout] = useState<string | null>(null);
 
   const close = () => (router.canGoBack() ? router.back() : router.replace('/extrato'));
 
@@ -69,12 +72,15 @@ export default function Importar() {
       const file = await pickStatementFile();
       if (!file) return;
       let st: ParsedStatement;
+      setPdfLayout(null);
       if (isPdf(file.bytes)) {
         if (!pdfSupported) {
           setError('por enquanto, faturas em pdf só podem ser importadas pelo navegador (appteo.com.br).');
           return;
         }
-        st = parsePdfPages(await pdfPages(file.bytes), todayDate, !!dest.cardId);
+        const pages = await pdfPages(file.bytes);
+        setPdfLayout(maskedLayout(pages));
+        st = parsePdfPages(pages, todayDate, !!dest.cardId);
         if (!st.lines.length) {
           setError(
             'não conseguimos reconhecer as movimentações desse pdf. manda um exemplo pra gente (contato@appteo.com.br) que a gente ensina o teo a ler esse banco.',
@@ -100,6 +106,15 @@ export default function Importar() {
       setError('não conseguimos abrir esse arquivo. tenta baixar de novo no banco?');
     } finally {
       setReading(false);
+    }
+  };
+
+  const copyLayout = async () => {
+    try {
+      await (globalThis as { navigator?: Navigator }).navigator!.clipboard.writeText(pdfLayout ?? '');
+      toast('copiado! é só colar na conversa com a gente (contato@appteo.com.br).');
+    } catch {
+      toast('não conseguimos copiar agora. tenta de novo?', 'erro');
     }
   };
 
@@ -188,6 +203,7 @@ export default function Importar() {
               {error}
             </Text>
           ) : null}
+          {error && pdfLayout ? <LayoutHelp onCopy={copyLayout} /> : null}
           <View style={styles.help}>
             <Icon as={Info} size={16} color={colors.textFaint} />
             <Text variant="small" color={colors.textFaint} style={{ flex: 1 }}>
@@ -241,6 +257,7 @@ export default function Importar() {
                 />
               ))}
             </Card>
+            {pdfLayout ? <LayoutHelp onCopy={copyLayout} /> : null}
           </View>
         </>
       )}
@@ -264,6 +281,22 @@ export default function Importar() {
         ) : null}
       </Sheet>
     </Screen>
+  );
+}
+
+/** quando a leitura do pdf sai estranha: copia os detalhes técnicos (sem dados pessoais). */
+function LayoutHelp({ onCopy }: { onCopy: () => void }) {
+  return (
+    <View style={styles.help}>
+      <Icon as={Info} size={16} color={colors.textFaint} />
+      <View style={{ flex: 1, gap: space.xs }}>
+        <Text variant="small" color={colors.textFaint}>
+          algum nome veio quebrado ou faltou alguma compra? copie os detalhes técnicos da leitura e mande pra gente. eles
+          não levam nomes nem valores, só a posição do texto no pdf.
+        </Text>
+        <Button label="copiar detalhes técnicos" variant="ghost" small onPress={onCopy} />
+      </View>
+    </View>
   );
 }
 

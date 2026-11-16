@@ -17,6 +17,22 @@ export interface TextPiece {
 
 /** vão mínimo (proporcional à fonte) para considerar que há um espaço entre palavras. */
 const SPACE_GAP = 0.18;
+/**
+ * quando o pdf escreve os espaços de verdade dentro do texto ("seg ca" "rta"), vãos menores
+ * que isso entre dois pedaços são só o jeito do gerador desenhar: a palavra continua.
+ */
+const GLUE_GAP = 1.0;
+/** pedaço com espaço de verdade entre duas letras/números ("seg ca", "s 06/1"). */
+const INNER_SPACE = /\S \S/;
+/** data, valor ou "r$": sempre separados do texto ao lado. */
+const TOKEN_END = /(^|\s)(\d{2}\/\d{2}(\/\d{2,4})?|[-+]?\s?(R\$\s?)?\d{1,3}(\.\d{3})*,\d{2}|R\$)$/i;
+const TOKEN_START = /^([-+]?\s?(R\$\s?)?\d{1,3}(\.\d{3})*,\d{2}|\d{2}\/\d{2}(\/\d{2,4})?(\s|$)|R\$)/i;
+
+/** o gerador deste pdf escreve os espaços dentro do texto? */
+function writesSpaces(pieces: TextPiece[]): boolean {
+  const words = pieces.filter((p) => /\p{L}.*\p{L}/u.test(p.str));
+  return words.length > 0 && words.filter((p) => INNER_SPACE.test(p.str.trim())).length / words.length >= 0.3;
+}
 
 export function buildLines(pieces: TextPiece[]): string[] {
   const rows = new Map<number, TextPiece[]>();
@@ -29,13 +45,20 @@ export function buildLines(pieces: TextPiece[]): string[] {
     list.push(p);
     rows.set(y, list);
   }
+  const pageWritesSpaces = writesSpaces(pieces.filter((p) => p.str.trim()));
   const out: string[] = [];
   for (const y of [...rows.keys()].sort((a, b) => b - a)) {
+    const row = rows.get(y)!.sort((a, b) => a.x - b.x);
+    const explicit = row.some((p) => INNER_SPACE.test(p.str.trim())) || pageWritesSpaces;
     let line = '';
     let end = -Infinity;
-    for (const part of rows.get(y)!.sort((a, b) => a.x - b.x)) {
+    for (const part of row) {
       const gap = part.x - end;
-      if (line && gap > part.size * SPACE_GAP && !line.endsWith(' ') && !part.str.startsWith(' ')) line += ' ';
+      if (line && !line.endsWith(' ') && !part.str.startsWith(' ')) {
+        const token = TOKEN_END.test(line) || TOKEN_START.test(part.str.trim());
+        const limit = explicit && !token ? GLUE_GAP : SPACE_GAP;
+        if (gap > part.size * limit) line += ' ';
+      }
       line += part.str;
       end = part.x + part.w;
     }
@@ -153,4 +176,19 @@ export function splitColumns(pieces: TextPiece[]): TextPiece[][] {
   }
   if (best < 100) return [pieces];
   return [pieces.filter((p) => p.x < cut), pieces.filter((p) => p.x >= cut)];
+}
+
+/**
+ * detalhes técnicos da leitura, sem dados pessoais: letras viram "x"/"X" e números viram "9".
+ * fica só a posição e o tamanho de cada pedaço, para entender como o banco monta o pdf.
+ */
+export function maskedLayout(pages: TextPiece[][], maxPieces = 400): string {
+  const mask = (s: string) => s.replace(/\p{L}/gu, (c) => (c === c.toLowerCase() ? 'x' : 'X')).replace(/\d/g, '9');
+  const r = (n: number) => Math.round(n * 10) / 10;
+  return pages
+    .slice(0, 2)
+    .map((pieces, i) =>
+      [`p${i + 1}`, ...pieces.slice(0, maxPieces).map((p) => `${r(p.x)} ${r(p.y)} ${r(p.w)} ${r(p.size)} [${mask(p.str)}]`)].join('\n'),
+    )
+    .join('\n');
 }
