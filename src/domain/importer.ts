@@ -291,6 +291,8 @@ export interface ImportRow {
   amount: Cents;
   date: ISODate;
   description: string;
+  /** observação opcional escrita pela pessoa na prévia. */
+  note: string;
   categoryId: string | null;
   suggestion: Suggestion | null;
   /** null = a pessoa ainda precisa responder a pergunta. */
@@ -330,8 +332,10 @@ export function buildImportRows(
   // fatura em pdf: compras parceladas vêm com a data da compra original. para caírem na fatura
   // certa, usamos o começo do período dessa fatura.
   const card = cardId ? s.cards.find((c) => c.id === cardId) : undefined;
+  let period: { start: ISODate; end: ISODate } | null = null;
   if (card && statement.invoiceDueDate) {
     const { start } = invoicePeriod(card, statement.invoiceDueDate);
+    period = { start, end: statement.invoiceDueDate };
     statement = { ...statement, lines: statement.lines.map((l) => (l.date < start ? { ...l, date: start } : l)) };
   }
   const used = new Set<string>(); // lançamentos/previsões já "casados" com uma linha
@@ -344,9 +348,10 @@ export function buildImportRows(
 
   const lastDate = statement.lines.reduce((m, l) => (l.date > m ? l.date : m), todayDate);
   const horizonEnd = lastDay(monthOf(addDays(lastDate, 31)));
-  const predictions: Entry[] = cardId
-    ? cardPredictions(s, cardId, horizonEnd)
-    : upcomingEntries(s, todayDate, horizonEnd).filter((e) => !e.invoiceDate);
+  // no cartão, vale o previsto no próprio cartão e também o que foi registrado na conta
+  // (ex.: um parcelamento lançado como conta fixa, que na verdade vem na fatura).
+  const accountPredictions = upcomingEntries(s, todayDate, horizonEnd).filter((e) => !e.invoiceDate && !e.investmentId);
+  const predictions: Entry[] = cardId ? [...cardPredictions(s, cardId, horizonEnd), ...accountPredictions] : accountPredictions;
 
   // 1ª passada: pares exatos (mesmo valor e mesma data). eles têm prioridade, para que um
   // registro não seja "gasto" com uma linha parecida de outro dia.
@@ -372,6 +377,7 @@ export function buildImportRows(
       amount,
       date: line.date,
       description: line.description,
+      note: '',
       categoryId: guessCategory(line.description, kind, s.categories),
       suggestion: null,
       decision: 'importar',
@@ -421,8 +427,13 @@ export function buildImportRows(
     }
 
     const predicted = predictions
-      .filter((e) => !used.has(e.key) && e.kind === kind && near(e.originalDate, line.date, 7))
-      .filter((e) => similarAmount(e.amount, amount))
+      .filter((e) => !used.has(e.key) && e.kind === kind)
+      .filter(
+        (e) =>
+          (near(e.originalDate, line.date, 7) && similarAmount(e.amount, amount)) ||
+          // fatura: parcela prevista para qualquer dia do período dessa fatura, com o mesmo valor.
+          (!!period && e.amount === amount && e.originalDate >= period.start && e.originalDate <= period.end),
+      )
       .sort((a, b) => Math.abs(a.amount - amount) - Math.abs(b.amount - amount))[0];
     if (predicted) {
       used.add(predicted.key);

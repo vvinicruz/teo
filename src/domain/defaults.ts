@@ -13,7 +13,6 @@ export const DEFAULT_CATEGORIES: Omit<Category, 'id'>[] = [
   { name: 'assinaturas', icon: 'assinaturas', kind: 'despesa' },
   { name: 'salário', icon: 'salario', kind: 'receita' },
   { name: 'renda extra', icon: 'renda-extra', kind: 'receita' },
-  { name: 'outros', icon: 'outros', kind: 'ambos' },
 ];
 
 export function defaultSettings(): Settings {

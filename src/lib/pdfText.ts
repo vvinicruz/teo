@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { buildLines } from '../domain/pdfLayout';
 
 /**
  * extrai o texto de um pdf, linha por linha, usando o pdf.js (mozilla) hospedado no próprio
@@ -8,6 +9,8 @@ import { Platform } from 'react-native';
 interface PdfTextItem {
   str: string;
   transform: number[];
+  /** largura do trecho, na mesma unidade da posição. */
+  width: number;
 }
 interface PdfJs {
   GlobalWorkerOptions: { workerSrc: string };
@@ -59,24 +62,11 @@ export async function pdfLines(bytes: Uint8Array): Promise<string[]> {
   for (let p = 1; p <= doc.numPages; p++) {
     const page = await doc.getPage(p);
     const { items } = await page.getTextContent();
-    const rows = new Map<number, { x: number; str: string }[]>();
-    for (const it of items) {
-      if (!it.str.trim()) continue;
-      const y = Math.round(it.transform[5]); // itens na mesma altura formam uma linha
-      const list = rows.get(y) ?? [];
-      list.push({ x: it.transform[4], str: it.str.trim() });
-      rows.set(y, list);
-    }
-    const ys = [...rows.keys()].sort((a, b) => b - a); // de cima para baixo
-    for (const y of ys) {
-      out.push(
-        rows
-          .get(y)!
-          .sort((a, b) => a.x - b.x)
-          .map((part) => part.str)
-          .join(' '),
-      );
-    }
+    out.push(
+      ...buildLines(
+        items.map((it) => ({ str: it.str, x: it.transform[4], y: it.transform[5], w: it.width, size: Math.abs(it.transform[0]) || 10 })),
+      ),
+    );
   }
   return out;
 }

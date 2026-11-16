@@ -303,6 +303,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             amount: row.amount,
             date: row.date,
             externalId: row.line.externalId,
+            ...(row.note.trim() ? { note: row.note.trim().slice(0, 500) } : {}),
           };
           if (row.decision === 'importar') {
             items.push({

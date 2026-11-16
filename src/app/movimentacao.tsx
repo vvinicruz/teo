@@ -63,6 +63,7 @@ export default function Movimentacao() {
 
   const [kind, setKind] = useState<Kind>(existing?.kind ?? recurrence?.kind ?? params.kind ?? 'despesa');
   const [amount, setAmount] = useState(existing?.amount ?? (fromPrediction ? recurrence!.amount : 0));
+  const [note, setNote] = useState(existing?.note ?? '');
   const [description, setDescription] = useState(existing?.description ?? (fromPrediction ? recurrence!.description : ''));
   const [categoryId, setCategoryId] = useState<string | null>(
     existing?.categoryId ?? (fromPrediction ? recurrence!.categoryId : null),
@@ -144,6 +145,7 @@ export default function Movimentacao() {
           paymentMethod: payment,
           cardId: isInvoicePayment ? null : cardId,
           accountId: cardId ? null : accountId,
+          note: note.trim() || null,
         });
         toast('prontinho, alteração salva.');
       } else if (repeat !== 'nao') {
@@ -173,6 +175,7 @@ export default function Movimentacao() {
             occurrenceDate: date,
             cardId,
             accountId: cardId ? null : accountId,
+            note: note.trim() || null,
           });
         }
         toast(repeat === 'sempre' ? 'prontinho! vai se repetir todo mês.' : `prontinho! ${parcelas} parcelas no horizonte.`);
@@ -190,6 +193,7 @@ export default function Movimentacao() {
           cardId,
           accountId: cardId ? null : accountId,
           investmentId: fromPrediction ? (recurrence!.investmentId ?? null) : null,
+          note: note.trim() || null,
         });
         toast(
           card
@@ -339,6 +343,16 @@ export default function Movimentacao() {
           placeholder={isIncome ? 'ex.: freela, salário' : 'ex.: mercado, uber, café'}
           maxLength={80}
           returnKeyType="done"
+        />
+
+        <TextField
+          label="observação (opcional)"
+          value={note}
+          onChangeText={setNote}
+          placeholder="algum detalhe que vale lembrar depois"
+          maxLength={500}
+          multiline
+          style={{ height: 80, paddingTop: space.md, textAlignVertical: 'top' }}
         />
 
         {!isSpecial ? (

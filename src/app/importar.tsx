@@ -18,6 +18,7 @@ import {
   Screen,
   Sheet,
   Text,
+  TextField,
   useFeedback,
 } from '../components';
 import { useData } from '../data/DataProvider';
@@ -109,6 +110,9 @@ export default function Importar() {
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, decision } : r)));
   const setCategory = (key: string, categoryId: string | null) =>
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, categoryId } : r)));
+  const setText = (key: string, patch: { description?: string; note?: string }) =>
+    setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   const counts = useMemo(() => {
     const pending = rows.filter((r) => r.decision === null).length;
@@ -214,13 +218,16 @@ export default function Importar() {
           <View style={styles.block}>
             <Text variant="heading">movimentações</Text>
             <Text variant="small" color={colors.textFaint}>
-              toque na categoria para trocar. desmarque o que não quiser importar.
+              toque no nome para editar ou escrever uma observação. desmarque o que não quiser importar.
             </Text>
             <Card padded={false} style={styles.list}>
               {rows.map((r, i) => (
                 <ImportLine
                   key={r.key}
                   row={r}
+                  expanded={expanded === r.key}
+                  onExpand={() => setExpanded(expanded === r.key ? null : r.key)}
+                  onText={(patch) => setText(r.key, patch)}
                   last={i === rows.length - 1}
                   categoryName={get(r.categoryId)?.name}
                   categoryIcon={get(r.categoryId)?.icon}
@@ -292,6 +299,9 @@ function QuestionCard({ row, onAnswer }: { row: ImportRow; onAnswer: (d: Decisio
 
 function ImportLine({
   row,
+  expanded,
+  onExpand,
+  onText,
   last,
   categoryName,
   categoryIcon,
@@ -299,6 +309,9 @@ function ImportLine({
   onCategory,
 }: {
   row: ImportRow;
+  expanded: boolean;
+  onExpand: () => void;
+  onText: (patch: { description?: string; note?: string }) => void;
   last: boolean;
   categoryName?: string;
   categoryIcon?: string;
@@ -336,9 +349,31 @@ function ImportLine({
         {on ? <Icon as={Check} size={14} color={colors.white} strokeWidth={2.6} /> : null}
       </Pressable>
       <View style={{ flex: 1, gap: 4 }}>
-        <Text variant="smallStrong" numberOfLines={1}>
-          {row.description}
-        </Text>
+        <Pressable onPress={onExpand} accessibilityRole="button" accessibilityLabel={`editar ${row.description}`} scaleTo={0.99}>
+          <Text variant="smallStrong" numberOfLines={expanded ? undefined : 1}>
+            {row.description}
+          </Text>
+          {row.note && !expanded ? (
+            <Text variant="caption" color={colors.textFaint} numberOfLines={1}>
+              {row.note}
+            </Text>
+          ) : null}
+        </Pressable>
+        {expanded ? (
+          <View style={styles.editor}>
+            <TextField label="nome" value={row.description} onChangeText={(t) => onText({ description: t })} maxLength={80} />
+            <TextField
+              label="observação (opcional)"
+              value={row.note}
+              onChangeText={(t) => onText({ note: t })}
+              placeholder="ex.: presente de aniversário da mãe"
+              maxLength={500}
+              multiline
+              style={{ height: 80, paddingTop: space.md, textAlignVertical: 'top' }}
+            />
+            <Button label="pronto" small variant="secondary" onPress={onExpand} style={{ alignSelf: 'flex-start' }} />
+          </View>
+        ) : null}
         <View style={styles.lineMeta}>
           <Text variant="caption" color={colors.textFaint}>
             {shortDate(row.date)}
@@ -369,7 +404,8 @@ const styles = StyleSheet.create({
   questionHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   answers: { flexDirection: 'row', gap: space.sm, marginTop: space.xs },
   list: { paddingHorizontal: space.lg },
-  line: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
+  editor: { gap: space.sm, marginTop: space.sm },
+  line: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md, paddingVertical: space.md },
   lineSep: { borderBottomWidth: 1, borderBottomColor: colors.line },
   lineMeta: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' },
   check: {

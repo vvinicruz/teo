@@ -223,6 +223,15 @@ describe('fatura em pdf', () => {
       ['2026-11-20', 'netflix.com', -5590],
     ]);
   });
+  it('parcelamento registrado na conta é reconhecido na fatura (caso real: iof refinanciamento)', () => {
+    const card = { ...nubank, closingDay: 3, dueDay: 10 };
+    const parcelamento = { id: 'r9', kind: 'despesa' as const, amount: 9355, description: 'parcelamento fatura', categoryId: null,
+      paymentMethod: null, dayOfMonth: 25, startMonth: '2026-10', occurrences: 6, skippedDates: [], createdAt: '' };
+    const st = parseCardPdf(['Vencimento: 10/12/2026', '06/11 IOF REFINANCIAMENTO DE 93,55']);
+    const rows = buildImportRows(base({ cards: [card], recurrences: [parcelamento] }), st, { cardId: 'nu', accountId: null }, '2026-12-01');
+    expect(rows[0].suggestion).toMatchObject({ type: 'previsao', entry: { recurrenceId: 'r9', originalDate: '2026-11-25' } });
+    expect(rows[0].decision).toBeNull();
+  });
   it('parcelas antigas caem no período da fatura; pagamento é pulado', () => {
     const card = { ...nubank, closingDay: 3, dueDay: 10 };
     const rows = buildImportRows(base({ cards: [card] }), parseCardPdf(linhas), { cardId: 'nu', accountId: null }, '2026-12-01');

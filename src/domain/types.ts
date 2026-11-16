@@ -71,6 +71,8 @@ export interface Transaction {
   accountId?: string | null;
   /** transferência entre contas: os dois lançamentos (saída e entrada) têm o mesmo id. */
   transferId?: string | null;
+  /** observação opcional, livre. */
+  note?: string | null;
   createdAt: string;
 }
 
