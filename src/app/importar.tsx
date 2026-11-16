@@ -24,6 +24,7 @@ import {
 } from '../components';
 import { useData } from '../data/DataProvider';
 import { friendlyDate, shortDate } from '../domain/dates';
+import { formatMoney } from '../domain/money';
 import { maskedLayout } from '../domain/pdfLayout';
 import {
   buildImportRows,
@@ -226,6 +227,8 @@ export default function Importar() {
             <Button label="trocar" variant="ghost" small onPress={pick} loading={reading} />
           </View>
 
+          {statement.invoiceCheck ? <InvoiceCheck check={statement.invoiceCheck} /> : null}
+
           {questions.length ? (
             <View style={styles.block}>
               <Text variant="heading">confere pra gente?</Text>
@@ -281,6 +284,21 @@ export default function Importar() {
         ) : null}
       </Sheet>
     </Screen>
+  );
+}
+
+/** confere a soma do que foi lido com os totais impressos na fatura. */
+function InvoiceCheck({ check }: { check: { expected: number; found: number } }) {
+  const ok = check.expected === check.found;
+  return (
+    <Card style={[styles.notice, { backgroundColor: ok ? colors.incomeSoft : colors.attentionSoft }]}>
+      <Icon as={ok ? Check : Info} size={18} color={ok ? colors.income : colors.attention} />
+      <Text variant="small" color={colors.text} style={{ flex: 1 }}>
+        {ok
+          ? 'conferido: a soma do que lemos bate com os totais da fatura. não ficou nada de fora.'
+          : `atenção: a soma do que lemos ficou ${formatMoney(Math.abs(check.expected - check.found))} diferente dos totais da fatura. pode estar faltando alguma movimentação. confira com a fatura antes de importar e, se puder, mande os detalhes técnicos lá embaixo pra gente.`}
+      </Text>
+    </Card>
   );
 }
 

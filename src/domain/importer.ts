@@ -10,7 +10,7 @@
 import { addDays, daysInclusive, lastDay, monthOf, type ISODate } from './dates';
 import { cardInvoices, invoicePeriod, upcomingEntries, recurrenceOccurrences, type Entry } from './finance';
 import { formatMoney, parseMoney, type Cents } from './money';
-import { buildLines, readTable, splitColumns, type TableRow, type TextPiece } from './pdfLayout';
+import { buildCellRows, buildLines, readTable, splitColumns, type TableRow, type TextPiece } from './pdfLayout';
 import type { Card, Category, Kind, PaymentMethod, Snapshot, Transaction } from './types';
 
 export interface StatementLine {
@@ -30,6 +30,11 @@ export interface ParsedStatement {
   looksLikeCard: boolean;
   /** fatura em pdf: vencimento encontrado no documento. */
   invoiceDueDate?: ISODate | null;
+  /**
+   * fatura em pdf: conferência com os totais impressos ("total dos pagamentos", "lançamentos no cartão"...).
+   * `expected` = soma dos totais da fatura; `found` = soma do que foi lido (compras positivas). vazio = sem totais.
+   */
+  invoiceCheck?: { expected: Cents; found: Cents } | null;
 }
 
 // ---------- leitura do arquivo ----------
@@ -208,10 +213,14 @@ export function parseCSV(text: string): ParsedStatement {
 // ---------- fatura em pdf (itaú e parecidos) ----------
 
 const PDF_TX = /(\d{2})\/(\d{2})\s+(.+?)\s+(-\s?)?(?:R\$\s?)?(\d{1,3}(?:\.\d{3})*,\d{2})(?=\s|$)/g;
+const PDF_SKIP_COMPACT = /^total|saldo(anterior|emaberto)|^lancamentos|faturaanterior|pagamentominimo|valorminimo|vencimento|creditorotativo|parcelamentodefaturasimula/;
+/** linhas de total da fatura (compras, pagamentos, produtos e serviços), sem as das próximas faturas. */
+const INVOICE_TOTAL = /^(totaldospagamentos|lancamentosnocartao|lancamentosprodutoseservicos|totaldoslancamentos|totaldascompras|lancamentosnacional|totaldelancamentos)/;
 const PDF_SKIP = /total|saldo (anterior|em aberto)|lan[cç]amentos|limite|fatura anterior|pagamento m[ií]nimo|valor m[ií]nimo|vencimento|cr[eé]dito rotativo|parcelamento de fatura - simula/i;
 
 // categorias que o itaú escreve embaixo de cada compra ("outros são paulo"): não fazem parte do nome.
 const CARD_CATEGORY_LINE = /^(outros|servi[cç]os|viagem|transporte|supermercado|alimenta[cç][aã]o|restaurante|sa[uú]de|educa[cç][aã]o|vestu[aá]rio|hobby|diversos|lazer|eletr[oô]nicos|casa|ve[ií]culos|turismo|entretenimento|farm[aá]cia|combust[ií]vel|moradia)\b/i;
+const CARD_CATEGORY_COMPACT = /^(outros|servicos|viagem|transporte|supermercado|alimentacao|restaurante|saude|educacao|vestuario|hobby|diversos|lazer|eletronicos|veiculos|turismo|entretenimento|farmacia|combustivel|moradia)/;
 const NOT_WRAP = /^(data|valor|total|r\$|lan[cç]amentos|compras|pagamentos|principal|juros|encargos|pr[oó]xima|limite|vencimento)/i;
 
 /** o nome da compra quebrou em duas linhas na coluna estreita? ("seg cartao" + "protegido") */
@@ -219,6 +228,7 @@ function isWrappedName(next: string, description: string): boolean {
   const t = next.trim();
   if (!t || t.length > 30 || t.split(/\s+/).length > 3) return false;
   if (/\d{2}\/\d{2}|\d,\d{2}|[()|]/.test(t) || NOT_WRAP.test(t) || CARD_CATEGORY_LINE.test(t)) return false;
+  if (CARD_CATEGORY_COMPACT.test(compactKey(t))) return false;
   const letters = t.replace(/[^\p{L}]/gu, '');
   if (!letters) return false;
   // nome em maiúsculas continua em maiúsculas
@@ -251,8 +261,9 @@ function joinWrappedLines(textLines: string[]): string[] {
  * "dd/mm descrição valor" (às vezes duas colunas na mesma linha). o ano vem do vencimento.
  */
 export function parseCardPdf(textLines: string[]): ParsedStatement {
-  const all = textLines.join('\n');
-  const due = all.match(/vencimento\D{0,30}(\d{2})\/(\d{2})\/(\d{4})/i);
+  // sem espaços: alguns pdfs (itaú) desenham o texto em pedaços ("ven ci men to: 2 1/10/2026")
+  const all = textLines.join(' ').replace(/\s+/g, '');
+  const due = all.match(/vencimento\D{0,30}?(\d{2})\/(\d{2})\/(\d{4})/i);
   const invoiceDueDate = due ? `${due[3]}-${due[2]}-${due[1]}` : null;
   const dueYear = due ? Number(due[3]) : new Date().getFullYear();
   const dueMonth = due ? Number(due[2]) : 12;
@@ -261,18 +272,27 @@ export function parseCardPdf(textLines: string[]): ParsedStatement {
   const seen = new Map<string, number>();
   // a seção "compras parceladas - próximas faturas" lista parcelas futuras: não entram agora.
   let skipping = false;
+  let expected: Cents = 0;
+  let totals = 0;
   for (const textLine of joinWrappedLines(textLines)) {
-    const low = normalize(textLine);
-    if (/proximas faturas/.test(low)) {
+    const key = compactKey(textLine);
+    if (/proximasfaturas/.test(key)) {
       skipping = true;
       continue;
     }
-    if (/^(lancamentos|pagamentos efetuados|encargos)/.test(low)) skipping = false;
+    if (/^(lancamentos|pagamentosefetuados|encargos)/.test(key)) skipping = false;
     if (skipping) continue;
+    // totais impressos na fatura, para conferir se lemos tudo
+    const total = INVOICE_TOTAL.test(key) ? textLine.match(/(-)?\s?(\d{1,3}(?:\.\d{3})*,\d{2})$/) : null;
+    if (total) {
+      expected += (total[1] ? -1 : 1) * (parseMoney(total[2]) ?? 0);
+      totals++;
+      continue;
+    }
     for (const segment of textLine.split(' | ')) {
       for (const m of segment.matchAll(PDF_TX)) {
         const [, dd, mm, rawDesc, minus, value] = m;
-        if (PDF_SKIP.test(rawDesc)) continue;
+        if (PDF_SKIP.test(rawDesc) || PDF_SKIP_COMPACT.test(compactKey(rawDesc))) continue;
         const day = Number(dd);
         const month = Number(mm);
         if (day < 1 || day > 31 || month < 1 || month > 12) continue;
@@ -290,7 +310,31 @@ export function parseCardPdf(textLines: string[]): ParsedStatement {
       }
     }
   }
-  return { format: 'pdf', lines, looksLikeCard: true, invoiceDueDate };
+  const found = lines.reduce((sum, l) => sum - l.amount, 0);
+  const invoiceCheck = totals ? { expected, found } : null;
+  return { format: 'pdf', lines, looksLikeCard: true, invoiceDueDate, invoiceCheck };
+}
+
+/** texto sem acentos, espaços nem pontuação: "La nça me nt os" vira "lancamentos". */
+function compactKey(text: string): string {
+  return normalize(text).replace(/[^a-z0-9]/g, '');
+}
+
+/** cartão: transforma as células de uma linha (data | nome | valor) em "dd/mm nome valor". */
+export function cardRowText(cells: string[]): string {
+  const last = cells[cells.length - 1] ?? '';
+  const amount = last.replace(/\s+/g, '').match(/^(-)?(?:R\$)?(\d{1,3}(?:\.\d{3})*,\d{2})$/i);
+  if (cells.length >= 2 && amount) {
+    const value = `${amount[1] ?? ''}${amount[2]}`;
+    // data no começo, mesmo quebrada pelo pdf ("1 1/1 0")
+    const date = cells[0].match(/^(\d)\s?(\d)\s?\/\s?(\d)\s?(\d)(?:\s+(.*))?$/);
+    if (date) {
+      const desc = [date[5] ?? '', ...cells.slice(1, -1)].join(' ').trim();
+      if (desc) return `${date[1]}${date[2]}/${date[3]}${date[4]} ${desc} ${value}`;
+    }
+    return [...cells.slice(0, -1), value].join(' ');
+  }
+  return cells.join(' ');
 }
 
 // ---------- extrato de conta em pdf (itaú, nubank, bradesco, bb...) ----------
@@ -407,9 +451,10 @@ function tableToStatement(rows: TableRow[]): ParsedStatement {
  */
 export function parsePdfPages(pages: TextPiece[][], todayDate: ISODate, preferCard: boolean): ParsedStatement {
   const allLines = pages.flatMap((p) => buildLines(p));
-  const text = normalize(allLines.join(' '));
-  const looksCard = /fatura|cartao de credito|pagamento minimo|limite de credito|limite disponivel|vencimento/.test(text);
-  const card = () => parseCardPdf(pages.flatMap((p) => splitColumns(p).flatMap((col) => buildLines(col))));
+  const text = compactKey(allLines.join(' '));
+  const looksCard = /fatura|cartaodecredito|pagamentominimo|limitedecredito|limitedisponivel|vencimento/.test(text);
+  const card = () =>
+    parseCardPdf(pages.flatMap((p) => splitColumns(p).flatMap((col) => buildCellRows(col).map(cardRowText))));
   const account = () => {
     const table = readTable(pages);
     if (table && table.length) return tableToStatement(table);
@@ -427,8 +472,8 @@ export function parsePdfPages(pages: TextPiece[][], todayDate: ISODate, preferCa
 
 /** decide se o pdf é fatura de cartão ou extrato de conta, e lê do jeito certo. */
 export function parsePdfStatement(textLines: string[], todayDate: ISODate, preferCard: boolean): ParsedStatement {
-  const text = normalize(textLines.join(' '));
-  const looksCard = /fatura|cartao de credito|pagamento minimo|limite de credito|limite disponivel|vencimento/.test(text);
+  const text = compactKey(textLines.join(' '));
+  const looksCard = /fatura|cartaodecredito|pagamentominimo|limitedecredito|limitedisponivel|vencimento/.test(text);
   const card = parseCardPdf(textLines);
   const account = parseAccountPdf(textLines, todayDate);
   if (preferCard || looksCard) return card.lines.length ? card : account;
@@ -518,6 +563,9 @@ export function detectInstallment(description: string): { n: number; total: numb
 
 const INVOICE_PAYMENT_RE = /fatura|pagamento (de )?cart|pgto cart|pag cart|cartao de credito|pagto cartao|pgto min|pgto fat|pagamento minimo/;
 const CARD_PAYMENT_RE = /pagamento (recebido|efetuado)|pgto recebido|pagamento de fatura|pagamento fatura|credito de pagamento|pagamento debito|pagamento minimo/;
+// os mesmos, sem espaços (pdfs que desenham o texto em pedaços: "pa gam ento d ebi to")
+const INVOICE_PAYMENT_COMPACT = /fatura|pagamentod?e?cart|pgtocart|pagcart|cartaodecredito|pagtocartao|pgtomin|pgtofat|pagamentominimo/;
+const CARD_PAYMENT_COMPACT = /pagamento(recebido|efetuado)|pgtorecebido|pagamento(de)?fatura|creditodepagamento|pagamentodebito|pagamentominimo/;
 
 const near = (a: ISODate, b: ISODate, days: number) => {
   const [x, y] = a <= b ? [a, b] : [b, a];
@@ -607,11 +655,12 @@ export function buildImportRows(
       return { ...row, suggestion: { type: 'ja-importada' }, decision: 'pular' };
     }
 
-    if (cardId && kind === 'receita' && CARD_PAYMENT_RE.test(d)) {
+    const key = compactKey(line.description);
+    if (cardId && kind === 'receita' && (CARD_PAYMENT_RE.test(d) || CARD_PAYMENT_COMPACT.test(key))) {
       return { ...row, categoryId: null, suggestion: { type: 'pagamento-no-cartao' }, decision: 'pular' };
     }
 
-    if (!cardId && kind === 'despesa' && INVOICE_PAYMENT_RE.test(d)) {
+    if (!cardId && kind === 'despesa' && (INVOICE_PAYMENT_RE.test(d) || INVOICE_PAYMENT_COMPACT.test(key))) {
       const invoice = s.cards
         .flatMap((card) => cardInvoices(s, card, horizonEnd, todayDate).map((inv) => ({ card, inv })))
         .filter(({ inv }) => !inv.payment && inv.total > 0 && near(inv.dueDate, line.date, 12))

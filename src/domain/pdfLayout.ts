@@ -34,38 +34,66 @@ function writesSpaces(pieces: TextPiece[]): boolean {
   return words.length > 0 && words.filter((p) => INNER_SPACE.test(p.str.trim())).length / words.length >= 0.3;
 }
 
-export function buildLines(pieces: TextPiece[]): string[] {
-  const rows = new Map<number, TextPiece[]>();
-  for (const p of pieces) {
-    // pedaços feitos só de espaço são "espaços falsos" inseridos pelo leitor de pdf:
-    // ignoramos e decidimos os espaços pela distância real entre os pedaços.
-    if (!p.str.trim()) continue;
-    const y = Math.round(p.y);
-    const list = rows.get(y) ?? [];
-    list.push(p);
-    rows.set(y, list);
+/**
+ * agrupa os pedaços por linha. tolera pequenas diferenças de altura: em algumas faturas a data
+ * fica um pouquinho acima do nome (fonte diferente) e mesmo assim é a mesma linha.
+ */
+export function groupRows(pieces: TextPiece[]): TextPiece[][] {
+  const sorted = pieces.filter((p) => p.str.trim()).sort((a, b) => b.y - a.y);
+  const rows: { y: number; items: TextPiece[] }[] = [];
+  for (const p of sorted) {
+    const last = rows[rows.length - 1];
+    if (last && last.y - p.y <= Math.max(2, p.size * 0.3)) last.items.push(p);
+    else rows.push({ y: p.y, items: [p] });
   }
-  const pageWritesSpaces = writesSpaces(pieces.filter((p) => p.str.trim()));
-  const out: string[] = [];
-  for (const y of [...rows.keys()].sort((a, b) => b - a)) {
-    const row = rows.get(y)!.sort((a, b) => a.x - b.x);
-    const explicit = row.some((p) => INNER_SPACE.test(p.str.trim())) || pageWritesSpaces;
-    let line = '';
-    let end = -Infinity;
-    for (const part of row) {
-      const gap = part.x - end;
-      if (line && !line.endsWith(' ') && !part.str.startsWith(' ')) {
-        const token = TOKEN_END.test(line) || TOKEN_START.test(part.str.trim());
-        const limit = explicit && !token ? GLUE_GAP : SPACE_GAP;
-        if (gap > part.size * limit) line += ' ';
-      }
-      line += part.str;
-      end = part.x + part.w;
+  return rows.map((r) => r.items.sort((a, b) => a.x - b.x));
+}
+
+/** junta os pedaços de uma linha (ou de uma célula), decidindo onde há espaço. */
+function joinPieces(row: TextPiece[], explicit: boolean): string {
+  let line = '';
+  let end = -Infinity;
+  for (const part of row) {
+    const gap = part.x - end;
+    if (line && !line.endsWith(' ') && !part.str.startsWith(' ')) {
+      const token = TOKEN_END.test(line) || TOKEN_START.test(part.str.trim());
+      const limit = explicit && !token ? GLUE_GAP : SPACE_GAP;
+      if (gap > part.size * limit) line += ' ';
     }
-    const clean = line.replace(/\s+/g, ' ').trim();
-    if (clean) out.push(clean);
+    line += part.str;
+    end = part.x + part.w;
   }
-  return out;
+  return line.replace(/\s+/g, ' ').trim();
+}
+
+export function buildLines(pieces: TextPiece[]): string[] {
+  // pedaços feitos só de espaço são "espaços falsos" inseridos pelo leitor de pdf:
+  // ignoramos e decidimos os espaços pela distância real entre os pedaços.
+  const real = pieces.filter((p) => p.str.trim());
+  const pageWritesSpaces = writesSpaces(real);
+  return groupRows(real)
+    .map((row) => joinPieces(row, row.some((p) => INNER_SPACE.test(p.str.trim())) || pageWritesSpaces))
+    .filter(Boolean);
+}
+
+/** vão (proporcional à fonte) que separa duas células da tabela (data | nome | valor). */
+const CELL_GAP = 1.0;
+
+/** linhas divididas em células: cada vão grande entre pedaços começa uma célula nova. */
+export function buildCellRows(pieces: TextPiece[]): string[][] {
+  const real = pieces.filter((p) => p.str.trim());
+  const pageWritesSpaces = writesSpaces(real);
+  return groupRows(real).map((row) => {
+    const explicit = row.some((p) => INNER_SPACE.test(p.str.trim())) || pageWritesSpaces;
+    const cells: TextPiece[][] = [];
+    let end = -Infinity;
+    for (const p of row) {
+      if (!cells.length || p.x - end > p.size * CELL_GAP) cells.push([]);
+      cells[cells.length - 1].push(p);
+      end = Math.max(end, p.x + p.w);
+    }
+    return cells.map((c) => joinPieces(c, explicit)).filter(Boolean);
+  });
 }
 
 const DATE_FULL = /^\d{2}\/\d{2}\/(\d{2}|\d{4})$/;
@@ -96,7 +124,7 @@ export function readTable(pages: TextPiece[][]): TableRow[] | null {
   let columns: { valorRight: number; saldoRight: number } | null = null;
   const rows: TableRow[] = [];
   for (const pieces of pages) {
-    const lines = buildLineGroups(pieces);
+    const lines = groupRows(pieces);
     // cabeçalho: uma linha com "valor" e "saldo".
     let headerY = Infinity;
     for (const group of lines) {
@@ -129,17 +157,6 @@ export function readTable(pages: TextPiece[][]): TableRow[] | null {
   return columns ? rows : null;
 }
 
-/** agrupa pedaços por linha (mesma altura). */
-function buildLineGroups(pieces: TextPiece[]): TextPiece[][] {
-  const rows = new Map<number, TextPiece[]>();
-  for (const p of pieces) {
-    if (!p.str.trim()) continue;
-    const y = Math.round(p.y);
-    rows.set(y, [...(rows.get(y) ?? []), p]);
-  }
-  return [...rows.entries()].sort((a, b) => b[0] - a[0]).map(([, g]) => g.sort((a, b) => a.x - b.x));
-}
-
 /** encontra uma palavra do cabeçalho, mesmo quebrada em pedaços ("descriç"+"ã"+"o"). */
 function mergedWord(group: TextPiece[], word: string): TextPiece | null {
   for (let i = 0; i < group.length; i++) {
@@ -160,8 +177,8 @@ function mergedWord(group: TextPiece[], word: string): TextPiece | null {
  * produtos/parcelas à direita) para que cada coluna seja lida de cima para baixo.
  */
 export function splitColumns(pieces: TextPiece[]): TextPiece[][] {
-  // a data pode vir sozinha ("06/10") ou grudada no nome ("06/10 uber"), conforme o gerador do pdf
-  const dateStarts = pieces.filter((p) => /^\d{2}\/\d{2}(?!\/|\d)/.test(p.str.trim()));
+  // a data pode vir sozinha ("06/10"), grudada no nome ("06/10 uber") ou quebrada ("1 1/1 0")
+  const dateStarts = pieces.filter((p) => /^\d{2}\/\d{2}(?!\/|\d)/.test(p.str.replace(/\s+/g, '')));
   if (dateStarts.length < 4) return [pieces];
   const xs = [...new Set(dateStarts.map((p) => Math.round(p.x / 10) * 10))].sort((a, b) => a - b);
   if (xs.length < 2) return [pieces];

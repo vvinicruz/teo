@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildImportRows, cleanDescription, decodeBytes, detectInstallment, guessCategory, parseAccountPdf, parseCardPdf, parseCSV, parseOFX, parsePdfStatement, parseStatement } from '../importer';
+import { buildImportRows, cardRowText, cleanDescription, decodeBytes, detectInstallment, guessCategory, parseAccountPdf, parseCardPdf, parseCSV, parseOFX, parsePdfStatement, parseStatement } from '../importer';
 import type { Card, Category, Snapshot, Transaction } from '../types';
 
 const TODAY = '2026-11-14';
@@ -259,6 +259,40 @@ describe('fatura em pdf', () => {
       ['alexandre maycon ribeir', -2000],
       ['tiktok shop *t 02/03', -2823],
     ]);
+  });
+  it('fatura do itaú com texto em pedaços: data quebrada, títulos espaçados e conferência dos totais', () => {
+    const linhas = [
+      'Ven ci men to: 2 1/10/2026',
+      'Pa ga me nt os efet uad os',
+      cardRowText(['0 6/10', 'Pa gam ento d ebi to m in imo', '-471,93']),
+      cardRowText(['To tal do s pa ga me nt os', '-471,93']),
+      'La nça me nt os: co m pr as e sa qu es',
+      cardRowText(['1 1/1 0', 'UB ER * PE ND ING', '20,95']),
+      'tr ans por te SA O PA ULO',
+      cardRowText(['10/10', 'MP *ME APLE IN GRE 01/03', '5 7,48']),
+      cardRowText(['La nça me nt os no ca rtão', '78,43']),
+      'Co m pr as pa rc ela das - pr óx im as fa tu ra s',
+      cardRowText(['10/10', 'MP *ME APLE IN GRE 02/03', '57,48']),
+      cardRowText(['Pr óx ima fa tu ra', '57,48']),
+    ];
+    const st = parseCardPdf(linhas);
+    expect(st.invoiceDueDate).toBe('2026-10-21');
+    expect(st.lines.map((l) => [l.date, l.amount])).toEqual([
+      ['2026-10-06', 47193],
+      ['2026-10-11', -2095],
+      ['2026-10-10', -5748],
+    ]);
+    expect(st.invoiceCheck).toEqual({ expected: -47193 + 7843, found: -47193 + 7843 });
+  });
+  it('conferência avisa quando falta alguma compra', () => {
+    const st = parseCardPdf(['Vencimento: 21/10/2026', '11/10 UBER 20,95', 'Lançamentos no cartão 41,90']);
+    expect(st.invoiceCheck).toEqual({ expected: 4190, found: 2095 });
+  });
+  it('pagamento com o nome em pedaços também é reconhecido como pagamento da fatura', () => {
+    const card = { ...nubank, closingDay: 14, dueDay: 21 };
+    const st = parseCardPdf(['Vencimento: 21/10/2026', cardRowText(['0 6/10', 'Pa gam ento d ebi to m in imo', '-471,93'])]);
+    const rows = buildImportRows(base({ cards: [card] }), st, { cardId: 'nu', accountId: null }, '2026-10-20');
+    expect(rows[0].decision).toBe('pular');
   });
   it('número da parcela quebrado pelo pdf é consertado', () => {
     expect(cleanDescription('ZP *OLX ANDERS 06/1 0').description).toBe('zp *olx anders 06/10');

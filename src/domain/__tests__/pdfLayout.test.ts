@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildLines, maskedLayout, splitColumns, type TextPiece } from '../pdfLayout';
+import { buildCellRows, buildLines, maskedLayout, splitColumns, type TextPiece } from '../pdfLayout';
 
 /** monta pedaços colados (sem vão) ou com vão, como um pdf real. largura ≈ 6 por letra. */
 function pieces(y: number, parts: (string | number)[]): TextPiece[] {
@@ -67,5 +67,17 @@ describe('pdf: detalhes técnicos', () => {
   it('não leva nomes nem valores', () => {
     const out = maskedLayout([[{ str: 'Uber Ônibus 51,98', x: 10.04, y: 700, w: 80, size: 9 }]]);
     expect(out).toBe('p1\n10 700 80 9 [Xxxx Xxxxxx 99,99]');
+  });
+});
+
+describe('pdf: linhas e células', () => {
+  it('data um pouco acima do nome continua na mesma linha', () => {
+    const rows = buildCellRows([
+      { str: '11/10', x: 23, y: 701.6, w: 17, size: 7 },
+      { str: 'UBER * PENDING', x: 53, y: 700, w: 50, size: 7 },
+      { str: '20,95', x: 270, y: 700, w: 17, size: 7 },
+      { str: 'transporte SAO PAULO', x: 53, y: 692, w: 60, size: 6 },
+    ]);
+    expect(rows).toEqual([['11/10', 'UBER * PENDING', '20,95'], ['transporte SAO PAULO']]);
   });
 });
