@@ -138,6 +138,7 @@ export default function Perfil() {
       <Group title="seu dinheiro">
         <Item icon={Wallet} label="saldo inicial" detail={<Money value={s.initialBalance} variant="small" color={colors.textSoft} />} onPress={() => open('saldo')} />
         <Item icon={PiggyBank} label="reserva que não quero gastar" detail={<Money value={s.reserve} variant="small" color={colors.textSoft} />} onPress={() => open('reserva')} />
+        <Item icon={Wallet} label="contas bancárias" onPress={() => router.push('/contas')} />
         <Item icon={CreditCard} label="cartões de crédito" onPress={() => router.push('/cartoes')} />
         <Item icon={Landmark} label="caixinhas e investimentos" onPress={() => router.push('/guardado')} />
         <Item icon={Receipt} label="imposto de renda" onPress={() => router.push('/imposto')} />

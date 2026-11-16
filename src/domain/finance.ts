@@ -60,6 +60,10 @@ export interface Entry {
   invoiceDate?: ISODate;
   /** guardar/resgatar numa caixinha. */
   investmentId?: string;
+  /** conta bancária (vazio = conta principal). */
+  accountId?: string;
+  /** transferência entre contas. */
+  transferId?: string;
 }
 
 const signed = (kind: Kind, amount: Cents) => (kind === 'receita' ? amount : -amount);
@@ -130,6 +134,8 @@ function txToEntry(t: Transaction, todayDate: ISODate, shiftOverdue: boolean): E
     recurrenceId: t.recurrenceId ?? undefined,
     cardId: t.cardId ?? undefined,
     investmentId: t.investmentId ?? undefined,
+    accountId: t.accountId ?? undefined,
+    transferId: t.transferId ?? undefined,
   };
 }
 
@@ -164,6 +170,7 @@ function occurrenceEntries(
         installment: rec.occurrences ? `${occ.index}/${rec.occurrences}` : undefined,
         cardId: rec.cardId ?? undefined,
         investmentId: rec.investmentId ?? undefined,
+        accountId: rec.accountId ?? undefined,
       });
     }
   }
@@ -430,16 +437,36 @@ export function realizedTransactions(s: Snapshot): Transaction[] {
   return s.transactions.filter((t) => t.status === 'realizada' && !t.cardId);
 }
 
-/** saldo atual: só o que já aconteceu de verdade na conta. */
+/** saldos iniciais somados: conta principal + contas bancárias cadastradas. */
+function initialBalances(s: Snapshot): Cents {
+  return s.settings.initialBalance + sum((s.accounts ?? []).map((a) => a.initialBalance));
+}
+
+/** saldo atual: só o que já aconteceu de verdade, somando todas as contas. */
 export function currentBalance(s: Snapshot): Cents {
-  return s.settings.initialBalance + sum(realizedTransactions(s).map((t) => signed(t.kind, t.amount)));
+  return initialBalances(s) + sum(realizedTransactions(s).map((t) => signed(t.kind, t.amount)));
 }
 
 /** saldo real ao fim de um dia (apenas lançamentos realizados até aquela data). */
 export function balanceAt(s: Snapshot, date: ISODate): Cents {
   return (
-    s.settings.initialBalance +
+    initialBalances(s) +
     sum(realizedTransactions(s).filter((t) => t.date <= date).map((t) => signed(t.kind, t.amount)))
+  );
+}
+
+/** saldo de uma conta (null = conta principal). */
+export function accountBalance(s: Snapshot, accountId: string | null): Cents {
+  const initial = accountId
+    ? (s.accounts.find((a) => a.id === accountId)?.initialBalance ?? 0)
+    : s.settings.initialBalance;
+  return (
+    initial +
+    sum(
+      realizedTransactions(s)
+        .filter((t) => (t.accountId ?? null) === accountId)
+        .map((t) => signed(t.kind, t.amount)),
+    )
   );
 }
 
@@ -453,7 +480,9 @@ export interface MonthSummary {
 
 export function monthSummary(s: Snapshot, month: MonthKey, todayDate: ISODate): MonthSummary {
   // guardar/resgatar mexem no saldo, mas não são "entrou" nem "saiu" do mês.
-  const realized = realizedTransactions(s).filter((t) => monthOf(t.date) === month && !t.investmentId);
+  const realized = realizedTransactions(s).filter(
+    (t) => monthOf(t.date) === month && !t.investmentId && !t.transferId,
+  );
   const isCurrent = month === monthOf(todayDate);
   const isPast = month < monthOf(todayDate);
   const upcoming = isCurrent
@@ -512,6 +541,7 @@ export function budgetProgress(s: Snapshot, month: MonthKey, todayDate: ISODate)
       t.kind === 'despesa' &&
       !t.paysCardId &&
       !t.investmentId &&
+      !t.transferId &&
       monthOf(t.date) === month,
   );
   const upcoming = upcomingConsumption(s, month, todayDate);
@@ -566,7 +596,8 @@ export function dailyAllowance(s: Snapshot, todayDate: ISODate): DailyAllowance 
       t.date === todayDate &&
       !t.recurrenceId &&
       !t.paysCardId &&
-      !t.investmentId,
+      !t.investmentId &&
+      !t.transferId,
   );
   const spentTodayCash = sum(todays.filter((t) => !t.cardId).map((t) => t.amount));
   const spentToday = sum(todays.map((t) => t.amount));

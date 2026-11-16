@@ -8,7 +8,7 @@
  * positivo = dinheiro entrando (ou estorno/pagamento no cartão).
  */
 import { addDays, daysInclusive, lastDay, monthOf, type ISODate } from './dates';
-import { cardInvoices, upcomingEntries, recurrenceOccurrences, type Entry } from './finance';
+import { cardInvoices, invoicePeriod, upcomingEntries, recurrenceOccurrences, type Entry } from './finance';
 import { formatMoney, parseMoney, type Cents } from './money';
 import type { Card, Category, Kind, PaymentMethod, Snapshot, Transaction } from './types';
 
@@ -23,10 +23,12 @@ export interface StatementLine {
 }
 
 export interface ParsedStatement {
-  format: 'ofx' | 'csv';
+  format: 'ofx' | 'csv' | 'pdf';
   lines: StatementLine[];
   /** o arquivo parece ser de cartão de crédito. */
   looksLikeCard: boolean;
+  /** fatura em pdf: vencimento encontrado no documento. */
+  invoiceDueDate?: ISODate | null;
 }
 
 // ---------- leitura do arquivo ----------
@@ -190,6 +192,49 @@ export function parseCSV(text: string): ParsedStatement {
   return { format: 'csv', lines, looksLikeCard };
 }
 
+// ---------- fatura em pdf (itaú e parecidos) ----------
+
+const PDF_TX = /(\d{2})\/(\d{2})\s+(.+?)\s+(-\s?)?(?:R\$\s?)?(\d{1,3}(?:\.\d{3})*,\d{2})(?=\s|$)/g;
+const PDF_SKIP = /total|saldo (anterior|em aberto)|lan[cç]amentos|limite|fatura anterior|pagamento m[ií]nimo|valor m[ií]nimo|vencimento|cr[eé]dito rotativo|parcelamento de fatura - simula/i;
+
+/**
+ * lê as linhas de texto de uma fatura de cartão em pdf. cada compra aparece como
+ * "dd/mm descrição valor" (às vezes duas colunas na mesma linha). o ano vem do vencimento.
+ */
+export function parseCardPdf(textLines: string[]): ParsedStatement {
+  const all = textLines.join('\n');
+  const due = all.match(/vencimento\D{0,30}(\d{2})\/(\d{2})\/(\d{4})/i);
+  const invoiceDueDate = due ? `${due[3]}-${due[2]}-${due[1]}` : null;
+  const dueYear = due ? Number(due[3]) : new Date().getFullYear();
+  const dueMonth = due ? Number(due[2]) : 12;
+
+  const lines: StatementLine[] = [];
+  const seen = new Map<string, number>();
+  for (const textLine of textLines) {
+    for (const segment of textLine.split(' | ')) {
+      for (const m of segment.matchAll(PDF_TX)) {
+        const [, dd, mm, rawDesc, minus, value] = m;
+        if (PDF_SKIP.test(rawDesc)) continue;
+        const day = Number(dd);
+        const month = Number(mm);
+        if (day < 1 || day > 31 || month < 1 || month > 12) continue;
+        const year = month > dueMonth ? dueYear - 1 : dueYear;
+        const cents = parseMoney(value);
+        if (!cents) continue;
+        const date = `${year}-${mm}-${dd}`;
+        const { description, method } = cleanDescription(rawDesc.replace(/\s+R\$$/, ''));
+        // na fatura, compras vêm positivas e créditos (estornos, pagamentos) com "-".
+        const amount = minus ? cents : -cents;
+        const base = `pdf:${date}:${description}:${amount}`;
+        const n = (seen.get(base) ?? 0) + 1;
+        seen.set(base, n);
+        lines.push({ date, amount, description, method, externalId: `${base}:${n}` });
+      }
+    }
+  }
+  return { format: 'pdf', lines, looksLikeCard: true, invoiceDueDate };
+}
+
 export function parseStatement(text: string): ParsedStatement {
   return /<OFX>|OFXHEADER/i.test(text) ? parseOFX(text) : parseCSV(text);
 }
@@ -229,7 +274,7 @@ export type Suggestion =
   /** essa linha já foi importada antes (mesmo identificador do banco). */
   | { type: 'ja-importada' }
   /** parece com um lançamento que já existe. */
-  | { type: 'parecida'; transaction: Transaction }
+  | { type: 'parecida'; transaction: Transaction; sameDay: boolean }
   /** parece com algo previsto (conta fixa, parcela, conta pendente). */
   | { type: 'previsao'; entry: Entry }
   /** no extrato da conta: parece o pagamento de uma fatura. */
@@ -260,6 +305,14 @@ const near = (a: ISODate, b: ISODate, days: number) => {
   return daysInclusive(x, y) - 1 <= days;
 };
 
+/** nomes parecidos: têm alguma palavra (de 4+ letras) em comum. */
+function similarText(a: string, b: string): boolean {
+  const words = (x: string) => new Set(normalize(x).split(/[^a-z0-9]+/).filter((w) => w.length >= 4));
+  const wa = words(a);
+  for (const w of words(b)) if (wa.has(w)) return true;
+  return false;
+}
+
 /** valores "parecidos": iguais, ou até 15% de diferença (conta de luz que variou). */
 const similarAmount = (a: Cents, b: Cents) => a === b || Math.abs(a - b) <= Math.max(a, b) * 0.15;
 
@@ -270,18 +323,44 @@ const similarAmount = (a: Cents, b: Cents) => a === b || Math.abs(a - b) <= Math
 export function buildImportRows(
   s: Snapshot,
   statement: ParsedStatement,
-  cardId: string | null,
+  dest: { cardId: string | null; accountId: string | null },
   todayDate: ISODate,
 ): ImportRow[] {
+  const { cardId } = dest;
+  // fatura em pdf: compras parceladas vêm com a data da compra original. para caírem na fatura
+  // certa, usamos o começo do período dessa fatura.
+  const card = cardId ? s.cards.find((c) => c.id === cardId) : undefined;
+  if (card && statement.invoiceDueDate) {
+    const { start } = invoicePeriod(card, statement.invoiceDueDate);
+    statement = { ...statement, lines: statement.lines.map((l) => (l.date < start ? { ...l, date: start } : l)) };
+  }
   const used = new Set<string>(); // lançamentos/previsões já "casados" com uma linha
   const importedIds = new Set(s.transactions.map((t) => t.externalId).filter(Boolean));
-  const sameDestination = s.transactions.filter((t) => (t.cardId ?? null) === cardId && !t.paysCardId);
+  // no cartão, compara só com o mesmo cartão. nas contas, compara com qualquer conta: a pessoa
+  // pode ter registrado sem escolher a conta certa.
+  const sameDestination = s.transactions.filter(
+    (t) => (t.cardId ?? null) === cardId && !t.paysCardId && !t.transferId && !t.investmentId,
+  );
 
   const lastDate = statement.lines.reduce((m, l) => (l.date > m ? l.date : m), todayDate);
   const horizonEnd = lastDay(monthOf(addDays(lastDate, 31)));
   const predictions: Entry[] = cardId
     ? cardPredictions(s, cardId, horizonEnd)
     : upcomingEntries(s, todayDate, horizonEnd).filter((e) => !e.invoiceDate);
+
+  // 1ª passada: pares exatos (mesmo valor e mesma data). eles têm prioridade, para que um
+  // registro não seja "gasto" com uma linha parecida de outro dia.
+  const exact = new Map<number, Transaction>();
+  statement.lines.forEach((line, i) => {
+    if (line.externalId && importedIds.has(line.externalId)) return;
+    const kind: Kind = line.amount < 0 ? 'despesa' : 'receita';
+    const amount = Math.abs(line.amount);
+    const t = sameDestination.find((x) => !used.has(x.id) && x.kind === kind && x.amount === amount && x.date === line.date);
+    if (t) {
+      used.add(t.id);
+      exact.set(i, t);
+    }
+  });
 
   return statement.lines.map((line, i) => {
     const kind: Kind = line.amount < 0 ? 'despesa' : 'receita';
@@ -324,12 +403,21 @@ export function buildImportRows(
       }
     }
 
+    const exactTwin = exact.get(i);
+    if (exactTwin) {
+      return { ...row, suggestion: { type: 'parecida', transaction: exactTwin, sameDay: true }, decision: null };
+    }
+    // 2ª chance: mesmo valor registrado em outro dia (1 dia de diferença, ou 2 se o nome for parecido).
     const twin = sameDestination.find(
-      (t) => !used.has(t.id) && t.kind === kind && t.amount === amount && near(t.date, line.date, 3),
+      (t) =>
+        !used.has(t.id) &&
+        t.kind === kind &&
+        t.amount === amount &&
+        (near(t.date, line.date, 1) || (near(t.date, line.date, 2) && similarText(t.description, line.description))),
     );
     if (twin) {
       used.add(twin.id);
-      return { ...row, suggestion: { type: 'parecida', transaction: twin }, decision: null };
+      return { ...row, suggestion: { type: 'parecida', transaction: twin, sameDay: false }, decision: null };
     }
 
     const predicted = predictions
@@ -402,7 +490,9 @@ export function suggestionText(sug: Suggestion, shortDate: (d: ISODate) => strin
     case 'pagamento-no-cartao':
       return 'é o pagamento da fatura. ele já aparece no extrato da conta, então vamos pular.';
     case 'parecida':
-      return `parece com "${sug.transaction.description}" de ${formatMoney(sug.transaction.amount)} do dia ${shortDate(sug.transaction.date)}, que você já registrou. é a mesma?`;
+      return sug.sameDay
+        ? `você já registrou "${sug.transaction.description}" de ${formatMoney(sug.transaction.amount)} nesse mesmo dia. é a mesma?`
+        : `parece com "${sug.transaction.description}" de ${formatMoney(sug.transaction.amount)}, que você registrou no dia ${shortDate(sug.transaction.date)}. foi a mesma, só que em outro dia?`;
     case 'previsao':
       return `parece ser "${sug.entry.description}", previsto para o dia ${shortDate(sug.entry.originalDate)}${
         sug.entry.amount !== 0 ? ` (${formatMoney(sug.entry.amount)})` : ''

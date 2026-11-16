@@ -102,6 +102,18 @@ export const HELP_TOPICS: HelpTopic[] = [
     action: { label: 'ver meus cartões', href: '/cartoes' },
   },
   {
+    id: 'contas',
+    icon: 'investimentos',
+    title: 'várias contas bancárias',
+    summary: 'nubank, itaú, carteira... cada uma com seu saldo.',
+    paragraphs: [
+      'em "onde foi?", toque em "+ adicionar" para cadastrar uma conta bancária ou um cartão, sem sair da tela.',
+      'cada conta tem seu saldo, e a tela inicial mostra a soma de todas. toque no saldo para ver conta por conta.',
+      'mandou dinheiro de uma conta para outra? use "transferir entre contas": não conta como gasto nem como receita.',
+    ],
+    action: { label: 'ver minhas contas', href: '/contas' },
+  },
+  {
     id: 'minimo',
     icon: 'investimentos',
     title: 'pagar só uma parte da fatura',
@@ -117,7 +129,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: 'importar o extrato do banco',
     summary: 'pra quando faltar tempo de registrar.',
     paragraphs: [
-      'no app ou site do banco, procure "exportar extrato" ou "baixar fatura" e salve o arquivo .ofx ou .csv. no teo, vá em extrato → importar e escolha o arquivo.',
+      'no app ou site do banco, procure "exportar extrato" ou "baixar fatura" e salve o arquivo .ofx, .csv ou a fatura do cartão em .pdf. no teo, vá em extrato → importar e escolha o arquivo.',
       'o teo sugere as categorias e pergunta quando algo parece repetido ("é a mesma?"). você confere tudo antes de salvar.',
       'o arquivo é lido só no seu aparelho e não é guardado. mas registrar no dia a dia ainda é o melhor jeito de perceber pra onde o dinheiro vai.',
     ],

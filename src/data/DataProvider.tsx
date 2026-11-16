@@ -9,10 +9,12 @@ import {
   type ReactNode,
 } from 'react';
 import { today } from '../domain/dates';
+import { MAIN_ACCOUNT_NAME } from '../domain/types';
 import { emptySnapshot } from '../domain/defaults';
 import type { Entry } from '../domain/finance';
 import { fitDescription, type ImportRow } from '../domain/importer';
 import type {
+  Account,
   Budget,
   Card,
   Category,
@@ -37,6 +39,7 @@ export type NewTransaction = Omit<Transaction, 'id' | 'createdAt'>;
 export type NewRecurrence = Omit<Recurrence, 'id' | 'createdAt' | 'skippedDates'>;
 export type NewGoal = Omit<Goal, 'id' | 'createdAt'>;
 export type NewCard = Omit<Card, 'id' | 'createdAt'>;
+export type NewAccount = Omit<Account, 'id' | 'createdAt'>;
 export type NewInvestment = Omit<Investment, 'id' | 'createdAt' | 'balanceUpdatedAt'>;
 
 interface DataValue {
@@ -55,7 +58,14 @@ interface DataValue {
   /** registra o pagamento de uma fatura (sai da conta e substitui a previsão). */
   payInvoice(card: Card, invoiceDate: string, opts?: { amount?: number; date?: string }): Promise<void>;
   /** grava as linhas confirmadas de um extrato importado. devolve quantas foram salvas. */
-  importRows(rows: ImportRow[], cardId: string | null): Promise<number>;
+  importRows(rows: ImportRow[], dest: { cardId: string | null; accountId: string | null }): Promise<number>;
+
+  addAccount(a: NewAccount): Promise<Account>;
+  updateAccount(a: Account): Promise<void>;
+  /** apaga a conta; se já tiver movimentações, ela é arquivada. */
+  deleteAccount(id: string): Promise<'removida' | 'arquivada'>;
+  /** transferência entre contas (null = conta principal). não é gasto nem receita. */
+  transfer(from: string | null, to: string | null, amount: number, date: string): Promise<void>;
 
   addInvestment(i: NewInvestment): Promise<Investment>;
   updateInvestment(i: Investment): Promise<void>;
@@ -230,7 +240,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
         return item;
       },
       updateTransaction: (t) => upsert('transactions', { ...t, description: fitDescription(t.description) }),
-      deleteTransaction: (id) => remove('transactions', id),
+      async deleteTransaction(id) {
+        // transferência: apaga os dois lados juntos.
+        const t = dataRef.current.transactions.find((x) => x.id === id);
+        if (t?.transferId) {
+          const ids = dataRef.current.transactions.filter((x) => x.transferId === t.transferId).map((x) => x.id);
+          for (const other of ids) await remove('transactions', other);
+          return;
+        }
+        await remove('transactions', id);
+      },
 
       async confirmEntry(entry, opts = {}) {
         const date = opts.date ?? (entry.originalDate <= today() ? entry.originalDate : today());
@@ -268,10 +287,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
       payInvoice,
 
-      async importRows(rows, cardId) {
+      async importRows(rows, dest) {
+        const { cardId, accountId } = dest;
         const now = nowIso();
         const items: Transaction[] = [];
         for (const row of rows) {
+          // "é a mesma" num extrato de conta: o registro passa a ficar na conta do extrato.
+          if (row.decision === 'pular' && row.suggestion?.type === 'parecida' && !cardId) {
+            const t = row.suggestion.transaction;
+            if ((t.accountId ?? null) !== accountId) items.push({ ...t, accountId });
+            continue;
+          }
           const sug = row.suggestion;
           const fromStatement = {
             amount: row.amount,
@@ -287,6 +313,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
               status: 'realizada',
               paymentMethod: cardId ? 'credito' : (row.line.method ?? null),
               cardId,
+              accountId: cardId ? null : accountId,
               createdAt: now,
               ...fromStatement,
             });
@@ -296,7 +323,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
               ? dataRef.current.transactions.find((t) => t.id === e.transactionId)
               : undefined;
             if (existing) {
-              items.push({ ...existing, status: 'realizada', ...fromStatement });
+              items.push({ ...existing, status: 'realizada', ...(cardId ? {} : { accountId }), ...fromStatement });
             } else if (e.recurrenceId) {
               const rec = dataRef.current.recurrences.find((r) => r.id === e.recurrenceId);
               items.push({
@@ -309,6 +336,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 recurrenceId: e.recurrenceId,
                 occurrenceDate: e.originalDate,
                 cardId,
+                accountId: cardId ? null : accountId,
                 createdAt: now,
                 ...fromStatement,
               });
@@ -323,6 +351,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
               paymentMethod: null,
               paysCardId: sug.card.id,
               invoiceDate: sug.invoiceDate,
+              accountId,
               createdAt: now,
               ...fromStatement,
             });
@@ -338,6 +367,39 @@ export function DataProvider({ children }: { children: ReactNode }) {
           (r) => r.upsertMany('transactions', items),
         );
         return items.length;
+      },
+
+      async addAccount(a) {
+        const item: Account = { ...a, id: newId(), createdAt: nowIso() };
+        await upsert('accounts', item);
+        return item;
+      },
+      updateAccount: (a) => upsert('accounts', a),
+      async deleteAccount(id) {
+        const s = dataRef.current;
+        const inUse = s.transactions.some((t) => t.accountId === id) || s.recurrences.some((r) => r.accountId === id);
+        if (inUse) {
+          const acc = s.accounts.find((x) => x.id === id);
+          if (acc) await upsert('accounts', { ...acc, archived: true });
+          return 'arquivada';
+        }
+        await remove('accounts', id);
+        return 'removida';
+      },
+      async transfer(from, to, amount, date) {
+        const s = dataRef.current;
+        const name = (id: string | null) => (id ? (s.accounts.find((a) => a.id === id)?.name ?? 'conta') : MAIN_ACCOUNT_NAME);
+        const transferId = newId();
+        const now = nowIso();
+        const base = { amount, categoryId: null, date, status: 'realizada' as const, paymentMethod: 'transferencia' as const, transferId, createdAt: now };
+        const items: Transaction[] = [
+          { ...base, id: newId(), kind: 'despesa', description: `transferência para ${name(to)}`, accountId: from },
+          { ...base, id: newId(), kind: 'receita', description: `transferência de ${name(from)}`, accountId: to },
+        ];
+        await commit(
+          (st) => ({ ...st, transactions: [...st.transactions, ...items] }),
+          (r) => r.upsertMany('transactions', items),
+        );
       },
 
       async addInvestment(i) {

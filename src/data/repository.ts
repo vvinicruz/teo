@@ -1,4 +1,4 @@
-import type { Budget, Card, Category, Goal, Investment, Recurrence, Settings, Snapshot, Transaction } from '../domain/types';
+import type { Account, Budget, Card, Category, Goal, Investment, Recurrence, Settings, Snapshot, Transaction } from '../domain/types';
 
 export interface CollectionMap {
   categories: Category;
@@ -8,6 +8,7 @@ export interface CollectionMap {
   goals: Goal;
   cards: Card;
   investments: Investment;
+  accounts: Account;
 }
 export type Collection = keyof CollectionMap;
 

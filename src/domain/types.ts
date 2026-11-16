@@ -67,6 +67,10 @@ export interface Transaction {
    * receita = resgatar. não é gasto nem receita: o dinheiro continua sendo seu.
    */
   investmentId?: string | null;
+  /** conta bancária onde o dinheiro entrou/saiu. vazio = conta principal. */
+  accountId?: string | null;
+  /** transferência entre contas: os dois lançamentos (saída e entrada) têm o mesmo id. */
+  transferId?: string | null;
   createdAt: string;
 }
 
@@ -89,6 +93,8 @@ export interface Recurrence {
   cardId?: string | null;
   /** "guardar todo mês": cada ocorrência leva dinheiro da conta para esta caixinha. */
   investmentId?: string | null;
+  /** conta bancária onde entra/sai. vazio = conta principal. */
+  accountId?: string | null;
   createdAt: string;
 }
 
@@ -148,6 +154,19 @@ export interface Card {
   createdAt: string;
 }
 
+/** conta bancária (corrente, digital, carteira...). a "conta principal" não é guardada aqui. */
+export interface Account {
+  id: string;
+  name: string;
+  bankCode?: string | null;
+  /** quanto tinha na conta quando foi cadastrada no teo. */
+  initialBalance: Cents;
+  archived?: boolean;
+  createdAt: string;
+}
+
+export const MAIN_ACCOUNT_NAME = 'conta principal';
+
 export type InvestmentKind = 'caixinha' | 'cdb' | 'poupanca' | 'tesouro' | 'outro';
 
 export const INVESTMENT_KINDS: { id: InvestmentKind; label: string }[] = [
@@ -182,4 +201,5 @@ export interface Snapshot {
   goals: Goal[];
   cards: Card[];
   investments: Investment[];
+  accounts: Account[];
 }

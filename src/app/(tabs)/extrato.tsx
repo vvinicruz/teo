@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { ChevronLeft, ChevronRight, CreditCard, FileUp, Search, SlidersHorizontal, Wallet, X } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, CreditCard, FileUp, Landmark, Search, SlidersHorizontal, Wallet, X } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 import {
@@ -55,8 +55,9 @@ export default function Extrato() {
     const list = data.transactions.filter((t) => {
       if (!searching && monthOf(t.date) !== month) return false;
       if (kind !== 'tudo' && t.kind !== kind) return false;
-      if (where === 'conta' && t.cardId) return false;
-      if (where !== 'tudo' && where !== 'conta' && t.cardId !== where) return false;
+      if (where === 'conta' && (t.cardId || t.accountId)) return false;
+      if (where.startsWith('acc:') && t.accountId !== where.slice(4)) return false;
+      if (where !== 'tudo' && where !== 'conta' && !where.startsWith('acc:') && t.cardId !== where) return false;
       if (status !== 'tudo' && t.status !== status) return false;
       if (categoryId && t.categoryId !== categoryId) return false;
       if (q) {
@@ -69,7 +70,7 @@ export default function Extrato() {
     const map = new Map<string, Transaction[]>();
     for (const t of list) map.set(t.date, [...(map.get(t.date) ?? []), t]);
     // guardar/resgatar não são entrada nem gasto: o dinheiro continua sendo seu.
-    const realized = list.filter((t) => t.status === 'realizada' && !t.investmentId);
+    const realized = list.filter((t) => t.status === 'realizada' && !t.investmentId && !t.transferId);
     return {
       groups: [...map.entries()],
       income: realized.filter((t) => t.kind === 'receita').reduce((a, t) => a + t.amount, 0),
@@ -178,7 +179,7 @@ export default function Extrato() {
       ) : (
         groups.map(([date, items]) => {
           const dayTotal = items
-            .filter((t) => t.status === 'realizada' && !t.paysCardId && !t.investmentId)
+            .filter((t) => t.status === 'realizada' && !t.paysCardId && !t.investmentId && !t.transferId)
             .reduce((a, t) => a + (t.kind === 'receita' ? t.amount : -t.amount), 0);
           return (
             <View key={date} style={styles.group}>
@@ -217,14 +218,17 @@ export default function Extrato() {
               ))}
             </View>
           </View>
-          {data.cards.length ? (
+          {data.cards.length || data.accounts.length ? (
             <View style={styles.filterGroup}>
               <Text variant="smallStrong" color={colors.textSoft}>
                 onde
               </Text>
               <View style={styles.chips}>
                 <Chip label="tudo" selected={where === 'tudo'} onPress={() => setWhere('tudo')} />
-                <Chip label="conta" icon={Wallet} selected={where === 'conta'} onPress={() => setWhere('conta')} />
+                <Chip label={data.accounts.length ? 'conta principal' : 'conta'} icon={Wallet} selected={where === 'conta'} onPress={() => setWhere('conta')} />
+                {data.accounts.map((a) => (
+                  <Chip key={a.id} label={a.name} icon={Landmark} selected={where === `acc:${a.id}`} onPress={() => setWhere(`acc:${a.id}`)} />
+                ))}
                 {data.cards.map((c) => (
                   <Chip key={c.id} label={c.name} icon={CreditCard} selected={where === c.id} onPress={() => setWhere(c.id)} />
                 ))}

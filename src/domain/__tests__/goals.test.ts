@@ -10,7 +10,7 @@ const viagem: Goal = { id: 'g', name: 'viagem', icon: 'viagem', target: 500000, 
 function base(over: Partial<Snapshot> = {}): Snapshot {
   return {
     settings: { name: 'v', initialBalance: 300000, initialBalanceDate: '2026-11-01', reserve: 0, hideValues: false, onboarded: true },
-    categories: [], transactions: [], recurrences: [], budgets: [], goals: [viagem], cards: [], investments: [cx], ...over,
+    categories: [], transactions: [], recurrences: [], budgets: [], goals: [viagem], cards: [], investments: [cx], accounts: [], ...over,
   };
 }
 let n = 0;

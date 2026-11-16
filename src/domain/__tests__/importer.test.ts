@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildImportRows, cleanDescription, decodeBytes, guessCategory, parseCSV, parseOFX, parseStatement } from '../importer';
+import { buildImportRows, cleanDescription, decodeBytes, guessCategory, parseCardPdf, parseCSV, parseOFX, parseStatement } from '../importer';
 import type { Card, Category, Snapshot, Transaction } from '../types';
 
 const TODAY = '2026-11-14';
@@ -62,7 +62,7 @@ const nubank: Card = { id: 'nu', name: 'nubank', closingDay: 3, dueDay: 10, cred
 function base(over: Partial<Snapshot> = {}): Snapshot {
   return {
     settings: { name: 'v', initialBalance: 0, initialBalanceDate: '2026-11-01', reserve: 0, hideValues: false, onboarded: true },
-    categories: cats, transactions: [], recurrences: [], budgets: [], goals: [], cards: [nubank], investments: [], ...over,
+    categories: cats, transactions: [], recurrences: [], budgets: [], goals: [], cards: [nubank], investments: [], accounts: [], ...over,
   };
 }
 let n = 0;
@@ -133,9 +133,31 @@ describe('categorias sugeridas', () => {
 describe('perguntas sobre duplicidade', () => {
   it('lançamento igual já registrado vira pergunta "é a mesma?"', () => {
     const s = base({ transactions: [tx({ amount: 12000, date: '2026-11-11', description: 'mercado' })] });
-    const rows = buildImportRows(s, parseOFX(OFX_CONTA), null, TODAY);
+    const rows = buildImportRows(s, parseOFX(OFX_CONTA), { cardId: null, accountId: null }, TODAY);
     expect(rows[0].suggestion?.type).toBe('parecida');
     expect(rows[0].decision).toBeNull(); // a pessoa precisa responder
+  });
+  it('mesmo valor 3 dias depois, com nomes diferentes, não é considerado igual (caso real: dspay x abastecimento)', () => {
+    const s = base({ transactions: [tx({ amount: 2200, date: '2026-11-09', description: 'abastecimento' })] });
+    const st = { format: 'ofx' as const, looksLikeCard: false, lines: [{ date: '2026-11-06', amount: -2200, description: 'dspay', externalId: null }] };
+    expect(buildImportRows(s, st, { cardId: null, accountId: null }, TODAY)[0].suggestion).toBeNull();
+  });
+  it('mesmo valor e mesma data tem prioridade sobre um parecido de outro dia', () => {
+    const s = base({ transactions: [tx({ amount: 2200, date: '2026-11-09', description: 'abastecimento' })] });
+    const st = { format: 'ofx' as const, looksLikeCard: false, lines: [
+      { date: '2026-11-08', amount: -2200, description: 'outra coisa', externalId: null },
+      { date: '2026-11-09', amount: -2200, description: 'posto sao vito', externalId: null },
+    ] };
+    const rows = buildImportRows(s, st, { cardId: null, accountId: null }, TODAY);
+    expect(rows[0].suggestion).toBeNull();
+    expect(rows[1].suggestion).toMatchObject({ type: 'parecida', sameDay: true });
+  });
+  it('segunda chance: 1 dia de diferença, ou 2 com nome parecido', () => {
+    const s = base({ transactions: [tx({ amount: 5000, date: '2026-11-09', description: 'posto são vito' })] });
+    const linha = (date: string, description: string) => ({ format: 'ofx' as const, looksLikeCard: false, lines: [{ date, amount: -5000, description, externalId: null }] });
+    expect(buildImportRows(s, linha('2026-11-10', 'qualquer'), { cardId: null, accountId: null }, TODAY)[0].suggestion).toMatchObject({ sameDay: false });
+    expect(buildImportRows(s, linha('2026-11-11', 'posto sao vito ltda'), { cardId: null, accountId: null }, TODAY)[0].suggestion).toMatchObject({ sameDay: false });
+    expect(buildImportRows(s, linha('2026-11-11', 'qualquer'), { cardId: null, accountId: null }, TODAY)[0].suggestion).toBeNull();
   });
   it('não pergunta duas vezes sobre o mesmo lançamento', () => {
     const s = base({ transactions: [tx({ amount: 12000, date: '2026-11-12' })] });
@@ -143,12 +165,12 @@ describe('perguntas sobre duplicidade', () => {
       { date: '2026-11-12', amount: -12000, description: 'a', externalId: null },
       { date: '2026-11-12', amount: -12000, description: 'b', externalId: null },
     ] };
-    const rows = buildImportRows(s, st, null, TODAY);
+    const rows = buildImportRows(s, st, { cardId: null, accountId: null }, TODAY);
     expect(rows.map((r) => r.suggestion?.type ?? null)).toEqual(['parecida', null]);
   });
   it('linha já importada é pulada sem perguntar', () => {
     const s = base({ transactions: [tx({ externalId: 'ofx:A1', amount: 12000, date: '2026-11-12' })] });
-    const rows = buildImportRows(s, parseOFX(OFX_CONTA), null, TODAY);
+    const rows = buildImportRows(s, parseOFX(OFX_CONTA), { cardId: null, accountId: null }, TODAY);
     expect(rows[0]).toMatchObject({ suggestion: { type: 'ja-importada' }, decision: 'pular' });
   });
   it('conta fixa prevista vira pergunta "é isso?", mesmo com valor um pouco diferente', () => {
@@ -156,7 +178,7 @@ describe('perguntas sobre duplicidade', () => {
       recurrences: [{ id: 'r1', kind: 'despesa', amount: 145000, description: 'aluguel', categoryId: 'c-mor', paymentMethod: null,
         dayOfMonth: 15, startMonth: '2026-11', occurrences: null, skippedDates: [], createdAt: '' }],
     });
-    const rows = buildImportRows(s, parseOFX(OFX_CONTA), null, TODAY);
+    const rows = buildImportRows(s, parseOFX(OFX_CONTA), { cardId: null, accountId: null }, TODAY);
     expect(rows[2].suggestion).toMatchObject({ type: 'previsao', entry: { recurrenceId: 'r1', originalDate: '2026-11-15' } });
     expect(rows[2].categoryId).toBe('c-mor');
   });
@@ -165,17 +187,47 @@ describe('perguntas sobre duplicidade', () => {
     const st = { format: 'csv' as const, looksLikeCard: false, lines: [
       { date: '2026-11-10', amount: -30000, description: 'pagamento de fatura nubank', externalId: null },
     ] };
-    const rows = buildImportRows(s, st, null, TODAY);
+    const rows = buildImportRows(s, st, { cardId: null, accountId: null }, TODAY);
     expect(rows[0].suggestion).toMatchObject({ type: 'fatura', invoiceDate: '2026-11-10', invoiceTotal: 30000 });
   });
   it('no extrato do cartão, "pagamento recebido" é pulado', () => {
-    const rows = buildImportRows(base(), parseOFX(OFX_CARTAO), 'nu', TODAY);
+    const rows = buildImportRows(base(), parseOFX(OFX_CARTAO), { cardId: 'nu', accountId: null }, TODAY);
     expect(rows[1]).toMatchObject({ suggestion: { type: 'pagamento-no-cartao' }, decision: 'pular' });
     expect(rows[0].categoryId).toBe('c-ass');
   });
   it('compra parecida em outro destino não é considerada duplicada', () => {
     const s = base({ transactions: [tx({ amount: 5590, date: '2026-11-10', cardId: null })] });
-    const rows = buildImportRows(s, parseOFX(OFX_CARTAO), 'nu', TODAY);
+    const rows = buildImportRows(s, parseOFX(OFX_CARTAO), { cardId: 'nu', accountId: null }, TODAY);
     expect(rows[0].suggestion).toBeNull();
+  });
+});
+
+describe('fatura em pdf', () => {
+  const linhas = [
+    'Resumo da fatura | Vencimento: 10/12/2026',
+    'Total desta fatura 1.234,56',
+    'Lançamentos: compras e saques',
+    '05/11 MERCADO EXTRA 120,50 | 08/11 UBER *TRIP 23,90',
+    '15/08 LOJA DE MOVEIS 03/10 200,00',
+    '12/11 PAGAMENTO EFETUADO - 800,00',
+    '20/11 NETFLIX.COM 55,90',
+  ];
+  it('lê compras em duas colunas, parcelas e o vencimento', () => {
+    const st = parseCardPdf(linhas);
+    expect(st.invoiceDueDate).toBe('2026-12-10');
+    expect(st.lines.map((l) => [l.date, l.description, l.amount])).toEqual([
+      ['2026-11-05', 'mercado extra', -12050],
+      ['2026-11-08', 'uber *trip', -2390],
+      ['2026-08-15', 'loja de moveis 03/10', -20000],
+      ['2026-11-12', 'pagamento efetuado', 80000],
+      ['2026-11-20', 'netflix.com', -5590],
+    ]);
+  });
+  it('parcelas antigas caem no período da fatura; pagamento é pulado', () => {
+    const card = { ...nubank, closingDay: 3, dueDay: 10 };
+    const rows = buildImportRows(base({ cards: [card] }), parseCardPdf(linhas), { cardId: 'nu', accountId: null }, '2026-12-01');
+    const parcela = rows.find((r) => r.description.startsWith('loja'));
+    expect(parcela?.date).toBe('2026-11-04');
+    expect(rows.find((r) => r.description === 'pagamento efetuado')?.decision).toBe('pular');
   });
 });

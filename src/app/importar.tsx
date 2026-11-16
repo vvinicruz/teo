@@ -9,6 +9,7 @@ import {
   CategoryIcon,
   CategoryPicker,
   DestinationPicker,
+  type Destination,
   Icon,
   IconButton,
   Mascot,
@@ -24,6 +25,7 @@ import { friendlyDate, shortDate } from '../domain/dates';
 import {
   buildImportRows,
   decodeBytes,
+  parseCardPdf,
   parseStatement,
   suggestionText,
   type Decision,
@@ -32,17 +34,19 @@ import {
 } from '../domain/importer';
 import { useCategories } from '../hooks/useCategories';
 import { useToday } from '../hooks/useToday';
+import { isPdf, pdfLines, pdfSupported } from '../lib/pdfText';
 import { pickStatementFile } from '../lib/statementFile';
 import { colors, radius, space } from '../theme';
 
 export default function Importar() {
-  const params = useLocalSearchParams<{ cardId?: string }>();
+  const params = useLocalSearchParams<{ cardId?: string; accountId?: string }>();
   const { data, importRows } = useData();
   const { forKind, get } = useCategories();
   const { toast } = useFeedback();
   const todayDate = useToday();
 
-  const [cardId, setCardId] = useState<string | null>(params.cardId ?? null);
+  const [dest, setDest] = useState<Destination>({ cardId: params.cardId ?? null, accountId: params.accountId ?? null });
+  const cardId = dest.cardId;
   const [fileName, setFileName] = useState<string | null>(null);
   const [statement, setStatement] = useState<ParsedStatement | null>(null);
   const [rows, setRows] = useState<ImportRow[]>([]);
@@ -53,7 +57,7 @@ export default function Importar() {
 
   const close = () => (router.canGoBack() ? router.back() : router.replace('/extrato'));
 
-  const rebuild = (st: ParsedStatement, dest: string | null) => setRows(buildImportRows(data, st, dest, todayDate));
+  const rebuild = (st: ParsedStatement, d: Destination) => setRows(buildImportRows(data, st, d, todayDate));
 
   const pick = async () => {
     setError(null);
@@ -61,19 +65,34 @@ export default function Importar() {
     try {
       const file = await pickStatementFile();
       if (!file) return;
-      const st = parseStatement(decodeBytes(file.bytes));
+      let st: ParsedStatement;
+      if (isPdf(file.bytes)) {
+        if (!pdfSupported) {
+          setError('por enquanto, faturas em pdf só podem ser importadas pelo navegador (appteo.com.br).');
+          return;
+        }
+        st = parseCardPdf(await pdfLines(file.bytes));
+        if (!st.lines.length) {
+          setError(
+            'não conseguimos reconhecer as compras desse pdf. se for uma fatura de cartão, manda um exemplo pra gente (contato@appteo.com.br) que a gente ensina o teo a ler.',
+          );
+          return;
+        }
+      } else {
+        st = parseStatement(decodeBytes(file.bytes));
+      }
       if (!st.lines.length) {
-        setError('não encontramos movimentações nesse arquivo. confere se ele é .ofx ou .csv, baixado no app ou site do banco?');
+        setError('não encontramos movimentações nesse arquivo. confere se ele é .ofx, .csv ou a fatura em .pdf, baixado no app ou site do banco?');
         return;
       }
       // arquivo de cartão e só um cartão cadastrado: já escolhemos ele.
-      let dest = cardId;
+      let next = dest;
       const activeCards = data.cards.filter((c) => !c.archived);
-      if (st.looksLikeCard && !dest && activeCards.length === 1) dest = activeCards[0].id;
-      setCardId(dest);
+      if (st.looksLikeCard && !next.cardId && activeCards.length === 1) next = { cardId: activeCards[0].id, accountId: null };
+      setDest(next);
       setFileName(file.name);
       setStatement(st);
-      rebuild(st, dest);
+      rebuild(st, next);
     } catch {
       setError('não conseguimos abrir esse arquivo. tenta baixar de novo no banco?');
     } finally {
@@ -81,9 +100,9 @@ export default function Importar() {
     }
   };
 
-  const changeDestination = (dest: string | null) => {
-    setCardId(dest);
-    if (statement) rebuild(statement, dest);
+  const changeDestination = (d: Destination) => {
+    setDest(d);
+    if (statement) rebuild(statement, d);
   };
 
   const setDecision = (key: string, decision: Decision) =>
@@ -103,7 +122,7 @@ export default function Importar() {
     if (counts.pending > 0 || counts.saving === 0) return;
     setSaving(true);
     try {
-      const n = await importRows(rows, cardId);
+      const n = await importRows(rows, dest);
       toast(`pronto! ${n} ${n === 1 ? 'movimentação importada' : 'movimentações importadas'}.`);
       router.replace(cardId ? { pathname: '/cartao', params: { id: cardId } } : '/extrato');
     } catch {
@@ -145,17 +164,7 @@ export default function Importar() {
         <Text variant="smallStrong" color={colors.textSoft}>
           de onde é esse extrato?
         </Text>
-        <DestinationPicker value={cardId} onChange={changeDestination} />
-        {data.cards.filter((c) => !c.archived).length === 0 ? (
-          <Pressable onPress={() => router.push('/cartao-form')}>
-            <Text variant="small" color={colors.textFaint}>
-              é a fatura de um cartão?{' '}
-              <Text variant="smallStrong" color={colors.primary}>
-                cadastre o cartão primeiro
-              </Text>
-            </Text>
-          </Pressable>
-        ) : null}
+        <DestinationPicker value={dest} onChange={changeDestination} />
         {statement && statement.looksLikeCard && !cardId ? (
           <Text variant="small" color={colors.attention}>
             esse arquivo parece ser de cartão de crédito. se for, escolha o cartão acima.
@@ -174,7 +183,7 @@ export default function Importar() {
           <View style={styles.help}>
             <Icon as={Info} size={16} color={colors.textFaint} />
             <Text variant="small" color={colors.textFaint} style={{ flex: 1 }}>
-              {'aceitamos arquivos .ofx e .csv. no app ou site do banco, procure por “exportar extrato” ou “baixar fatura”. o arquivo é lido aqui mesmo e não é enviado para lugar nenhum.'}
+              {'aceitamos arquivos .ofx e .csv, e a fatura do cartão em .pdf. no app ou site do banco, procure por “exportar extrato” ou “baixar fatura”. o arquivo é lido aqui mesmo e não é enviado para lugar nenhum.'}
             </Text>
           </View>
         </View>

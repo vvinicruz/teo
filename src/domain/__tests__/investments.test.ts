@@ -12,7 +12,7 @@ const caixinha: Investment = {
 function base(over: Partial<Snapshot> = {}): Snapshot {
   return {
     settings: { name: 'v', initialBalance: 300000, initialBalanceDate: '2026-11-01', reserve: 0, hideValues: false, onboarded: true },
-    categories: [], transactions: [], recurrences: [], goals: [], cards: [], investments: [caixinha],
+    categories: [], transactions: [], recurrences: [], goals: [], cards: [], investments: [caixinha], accounts: [],
     budgets: [{ id: 'b', categoryId: 'alimentacao', amount: 50000 }],
     ...over,
   };

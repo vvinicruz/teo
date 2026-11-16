@@ -10,6 +10,7 @@ const TABLES: Record<Collection, string> = {
   goals: 'goals',
   cards: 'cards',
   investments: 'investments',
+  accounts: 'accounts',
 };
 
 const toSnake = (k: string) => k.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
@@ -50,7 +51,7 @@ export function createSupabaseRepository(sb: SupabaseClient, userId: string): Re
         await sb.from('profiles').select('*').eq('user_id', userId).maybeSingle(),
       ) as Record<string, unknown> | null;
       if (!profile) return null;
-      const [categories, transactions, recurrences, budgets, goals, cards, investments] = await Promise.all(
+      const [categories, transactions, recurrences, budgets, goals, cards, investments, accounts] = await Promise.all(
         (Object.keys(TABLES) as Collection[]).map(async (c) =>
           (check(await sb.from(TABLES[c]).select('*')) as Record<string, unknown>[]).map((r) =>
             fromRow(r),
@@ -66,6 +67,7 @@ export function createSupabaseRepository(sb: SupabaseClient, userId: string): Re
         goals,
         cards,
         investments,
+        accounts,
       } as Snapshot;
     },
     async init(snapshot) {
@@ -91,7 +93,7 @@ export function createSupabaseRepository(sb: SupabaseClient, userId: string): Re
     },
     async wipe() {
       // ordem importa por causa das chaves estrangeiras.
-      for (const t of ['transactions', 'budgets', 'recurrences', 'goals', 'categories', 'cards', 'investments', 'profiles']) {
+      for (const t of ['transactions', 'budgets', 'recurrences', 'goals', 'categories', 'cards', 'investments', 'accounts', 'profiles']) {
         check(await sb.from(t).delete().eq('user_id', userId));
       }
     },

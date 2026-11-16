@@ -22,7 +22,7 @@ export function createLocalRepository(): Repository {
       // dados salvos por versões antigas do app podem não ter coleções novas.
       const parsed = raw ? (JSON.parse(raw) as Partial<Snapshot>) : null;
       cache = parsed
-        ? ({ ...parsed, cards: parsed.cards ?? [], investments: parsed.investments ?? [] } as Snapshot)
+        ? ({ ...parsed, cards: parsed.cards ?? [], investments: parsed.investments ?? [], accounts: parsed.accounts ?? [] } as Snapshot)
         : null;
       return cache;
     },

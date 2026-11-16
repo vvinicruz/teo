@@ -35,6 +35,8 @@ type Params = {
   occurrenceDate?: string;
   /** já abre como compra num cartão. */
   cardId?: string;
+  /** já abre numa conta bancária. */
+  accountId?: string;
 };
 
 type RepeatMode = 'nao' | 'sempre' | 'parcelas';
@@ -72,6 +74,9 @@ export default function Movimentacao() {
   const [cardId, setCardId] = useState<string | null>(
     existing ? (existing.cardId ?? null) : fromPrediction ? (recurrence!.cardId ?? null) : (params.cardId ?? null),
   );
+  const [accountId, setAccountId] = useState<string | null>(
+    existing ? (existing.accountId ?? null) : fromPrediction ? (recurrence!.accountId ?? null) : (params.accountId ?? null),
+  );
   const [payment, setPayment] = useState<PaymentMethod | null>(
     existing?.paymentMethod ?? (fromPrediction ? recurrence!.paymentMethod : params.cardId ? 'credito' : null),
   );
@@ -95,9 +100,9 @@ export default function Movimentacao() {
   const isInvoicePayment = !!existing?.paysCardId;
   // guardar/resgatar numa caixinha: também sem categoria nem cartão.
   const movedInvestment = existing?.investmentId ? data.investments.find((i) => i.id === existing.investmentId) : undefined;
-  const isSpecial = isInvoicePayment || !!existing?.investmentId || !!(fromPrediction && recurrence?.investmentId);
+  const isSpecial =
+    isInvoicePayment || !!existing?.investmentId || !!existing?.transferId || !!(fromPrediction && recurrence?.investmentId);
   const card = cardId ? data.cards.find((c) => c.id === cardId) : undefined;
-  const hasCards = data.cards.some((c) => !c.archived) || !!cardId;
   const accent = isIncome ? colors.income : colors.text;
 
   const title = existing ? 'editar movimentação' : fromPrediction ? 'confirmar previsão' : 'nova movimentação';
@@ -138,6 +143,7 @@ export default function Movimentacao() {
           status: finalStatus,
           paymentMethod: payment,
           cardId: isInvoicePayment ? null : cardId,
+          accountId: cardId ? null : accountId,
         });
         toast('prontinho, alteração salva.');
       } else if (repeat !== 'nao') {
@@ -152,6 +158,7 @@ export default function Movimentacao() {
           startMonth: monthOf(date),
           occurrences: parcelas,
           cardId,
+          accountId: cardId ? null : accountId,
         });
         if (finalStatus === 'realizada') {
           await addTransaction({
@@ -165,6 +172,7 @@ export default function Movimentacao() {
             recurrenceId: rec.id,
             occurrenceDate: date,
             cardId,
+            accountId: cardId ? null : accountId,
           });
         }
         toast(repeat === 'sempre' ? 'prontinho! vai se repetir todo mês.' : `prontinho! ${parcelas} parcelas no horizonte.`);
@@ -180,6 +188,7 @@ export default function Movimentacao() {
           recurrenceId: fromPrediction ? recurrence!.id : null,
           occurrenceDate: fromPrediction ? params.occurrenceDate! : null,
           cardId,
+          accountId: cardId ? null : accountId,
           investmentId: fromPrediction ? (recurrence!.investmentId ?? null) : null,
         });
         toast(
@@ -268,6 +277,15 @@ export default function Movimentacao() {
         </Pressable>
       ) : null}
 
+      {existing?.transferId ? (
+        <View style={styles.recInfo}>
+          <Icon as={Landmark} size={18} color={colors.primary} />
+          <Text variant="small" color={colors.textSoft} style={{ flex: 1 }}>
+            transferência entre contas: não conta como gasto nem como receita. apagar este lançamento apaga os dois lados.
+          </Text>
+        </View>
+      ) : null}
+
       {existing?.investmentId ? (
         <View style={styles.recInfo}>
           <Icon as={Landmark} size={18} color={colors.primary} />
@@ -323,17 +341,18 @@ export default function Movimentacao() {
           returnKeyType="done"
         />
 
-        {hasCards && !isSpecial ? (
+        {!isSpecial ? (
           <View style={styles.block}>
             <Text variant="smallStrong" color={colors.textSoft}>
               {isIncome ? 'onde entrou?' : 'onde foi?'}
             </Text>
             <DestinationPicker
-              value={cardId}
-              onChange={(id) => {
-                setCardId(id);
-                if (id && !payment) setPayment('credito');
-                if (!id && payment === 'credito') setPayment(null);
+              value={{ accountId, cardId }}
+              onChange={(d) => {
+                setCardId(d.cardId);
+                setAccountId(d.accountId);
+                if (d.cardId && !payment) setPayment('credito');
+                if (!d.cardId && payment === 'credito') setPayment(null);
               }}
             />
             {card ? (

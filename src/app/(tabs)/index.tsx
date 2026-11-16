@@ -152,9 +152,13 @@ export default function Inicio() {
 
       {/* saldo */}
       <FadeIn>
-        <Card style={styles.balanceCard}>
+        <Card style={styles.balanceCard} onPress={data.accounts.length ? () => router.push('/contas') : undefined}>
           <Text variant="smallStrong" color={colors.textSoft}>
-            {view.invested > 0 ? 'disponível na conta' : 'saldo atual'}
+            {data.accounts.some((x) => !x.archived)
+              ? 'disponível nas contas'
+              : view.invested > 0
+                ? 'disponível na conta'
+                : 'saldo atual'}
           </Text>
           <Money value={h.currentBalance} variant="display" color={h.currentBalance < 0 ? colors.danger : colors.text} />
           <View style={styles.monthRow}>

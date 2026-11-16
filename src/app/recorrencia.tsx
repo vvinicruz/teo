@@ -41,7 +41,7 @@ export default function RecorrenciaForm() {
   const [count, setCount] = useState(String(existing?.occurrences ?? 12));
   const [payment, setPayment] = useState<PaymentMethod | null>(existing?.paymentMethod ?? null);
   const [cardId, setCardId] = useState<string | null>(existing?.cardId ?? null);
-  const hasCards = data.cards.some((c) => !c.archived) || !!cardId;
+  const [accountId, setAccountId] = useState<string | null>(existing?.accountId ?? null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -76,6 +76,7 @@ export default function RecorrenciaForm() {
       startMonth,
       occurrences: limited ? n : null,
       cardId,
+      accountId: cardId ? null : accountId,
     };
     try {
       if (existing) await updateRecurrence({ ...existing, ...payload });
@@ -164,16 +165,18 @@ export default function RecorrenciaForm() {
           <CategoryPicker categories={forKind(kind)} value={categoryId} onChange={setCategoryId} income={kind === 'receita'} />
         </View>
 
-        {hasCards ? (
+        {!existing?.investmentId ? (
           <View style={styles.block}>
             <Text variant="smallStrong" color={colors.textSoft}>
               {kind === 'receita' ? 'onde entra?' : 'onde é cobrada?'}
             </Text>
             <DestinationPicker
-              value={cardId}
-              onChange={(id) => {
-                setCardId(id);
-                if (id && !payment) setPayment('credito');
+              value={{ accountId, cardId }}
+              accountsOnly={kind === 'receita'}
+              onChange={(d) => {
+                setCardId(d.cardId);
+                setAccountId(d.accountId);
+                if (d.cardId && !payment) setPayment('credito');
               }}
             />
             {cardId ? (

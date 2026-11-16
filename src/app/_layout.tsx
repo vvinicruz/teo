@@ -109,6 +109,8 @@ function Gate() {
         <Stack.Screen name="caixinha-form" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="objetivo" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="imposto" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="contas" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="conta-form" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="imposto-quiz" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
       </Stack.Protected>
       {/* termos e privacidade ficam acessíveis sempre, inclusive antes do login. */}

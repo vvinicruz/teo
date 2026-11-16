@@ -32,6 +32,7 @@ function base(over: Partial<Snapshot> = {}): Snapshot {
     goals: [],
     cards: [],
     investments: [],
+    accounts: [],
     ...over,
   };
 }
