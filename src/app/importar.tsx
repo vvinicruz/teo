@@ -460,24 +460,23 @@ function ImportLine({
         {row.installment && row.decision === 'importar' ? (
           <View style={styles.installment}>
             <Text variant="caption" color={colors.textSoft}>
-              parcela {row.installment.n} de {row.installment.total}. lançar também:
+              parcela {row.installment.n} de {row.installment.total}. o que lançar?
             </Text>
             <View style={styles.installmentChips}>
               <Chip label="só esta" selected={row.installmentChoice === 'so-esta'} onPress={() => onInstallment('so-esta')} />
-              {row.installment.n < row.installment.total ? (
+              {/* parcela 1: "todas" já é esta + as próximas. no meio: as duas opções. */}
+              {row.installment.n > 1 && row.installment.n < row.installment.total ? (
                 <Chip
-                  label={`as próximas (${row.installment.n + 1} a ${row.installment.total})`}
+                  label={`esta e as próximas (${row.installment.n} a ${row.installment.total})`}
                   selected={row.installmentChoice === 'proximas'}
                   onPress={() => onInstallment('proximas')}
                 />
               ) : null}
-              {row.installment.n > 1 ? (
-                <Chip
-                  label={`todas (1 a ${row.installment.total})`}
-                  selected={row.installmentChoice === 'todas'}
-                  onPress={() => onInstallment('todas')}
-                />
-              ) : null}
+              <Chip
+                label={`todas (1 a ${row.installment.total})`}
+                selected={row.installmentChoice === 'todas'}
+                onPress={() => onInstallment('todas')}
+              />
             </View>
           </View>
         ) : null}
