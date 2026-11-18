@@ -300,11 +300,11 @@ describe('fatura em pdf', () => {
     expect(detectInstallment(cleanDescription('ZP *OLX ANDERS 06/1 0').description)).toMatchObject({ n: 6, total: 10 });
     expect(cleanDescription('posto 24/7').description).toBe('posto 24/7');
   });
-  it('parcelas antigas caem no período da fatura; pagamento é pulado', () => {
+  it('parcelas antigas caem no mesmo dia, dentro do período da fatura; pagamento é pulado', () => {
     const card = { ...nubank, closingDay: 3, dueDay: 10 };
     const rows = buildImportRows(base({ cards: [card] }), parseCardPdf(linhas), { cardId: 'nu', accountId: null }, '2026-12-01');
     const parcela = rows.find((r) => r.description.startsWith('loja'));
-    expect(parcela?.date).toBe('2026-11-04');
+    expect(parcela?.date).toBe('2026-11-15'); // compra de 15/08, parcela 3: dia 15 no período 04/11 a 03/12
     expect(rows.find((r) => r.description === 'pagamento efetuado')?.decision).toBe('pular');
   });
 });

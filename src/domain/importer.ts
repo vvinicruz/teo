@@ -8,7 +8,15 @@
  * positivo = dinheiro entrando (ou estorno/pagamento no cartão).
  */
 import { addDays, daysInclusive, lastDay, monthOf, type ISODate } from './dates';
-import { cardInvoices, invoicePeriod, upcomingEntries, recurrenceOccurrences, type Entry } from './finance';
+import {
+  cardInvoices,
+  installmentDateIn,
+  invoiceDueFor,
+  invoicePeriod,
+  recurrenceOccurrences,
+  upcomingEntries,
+  type Entry,
+} from './finance';
 import { formatMoney, parseMoney, type Cents } from './money';
 import { buildCellRows, buildLines, readTable, splitColumns, type TableRow, type TextPiece } from './pdfLayout';
 import type { Card, Category, Kind, PaymentMethod, Snapshot, Transaction } from './types';
@@ -21,6 +29,8 @@ export interface StatementLine {
   externalId: string | null;
   /** forma de pagamento percebida pela descrição (pix, débito...). */
   method?: PaymentMethod | null;
+  /** cartão: fatura (vencimento) em que a compra entrou, quando a data é de antes do período dela. */
+  invoiceDate?: ISODate | null;
 }
 
 export interface ParsedStatement {
@@ -594,7 +604,7 @@ export function guessCategory(description: string, kind: Kind, categories: Categ
 /** o que o teo quer perguntar ou avisar sobre uma linha. */
 export type Suggestion =
   /** essa linha já foi importada antes (mesmo identificador do banco). */
-  | { type: 'ja-importada' }
+  | { type: 'ja-importada'; fix?: Transaction }
   /** parece com um lançamento que já existe. */
   | { type: 'parecida'; transaction: Transaction; sameDay: boolean }
   /** parece com algo previsto (conta fixa, parcela, conta pendente). */
@@ -623,6 +633,8 @@ export interface ImportRow {
   installment: { n: number; total: number; base: string } | null;
   /** lançar também as outras parcelas? */
   installmentChoice: InstallmentChoice;
+  /** cartão: fatura (vencimento) em que a compra entrou, se for diferente da que a data indica. */
+  invoiceDate: ISODate | null;
 }
 
 export type InstallmentChoice = 'so-esta' | 'proximas' | 'todas';
@@ -671,14 +683,24 @@ export function buildImportRows(
   todayDate: ISODate,
 ): ImportRow[] {
   const { cardId } = dest;
-  // fatura em pdf: compras parceladas vêm com a data da compra original. para caírem na fatura
-  // certa, usamos o começo do período dessa fatura.
+  // fatura (pdf ou planilha): a data é a da compra. compras feitas antes do período da fatura
+  // (o banco fecha alguns dias antes, ou é parcela de compra antiga) precisam cair na fatura certa:
+  // - parcelas: vão para o mesmo dia, dentro do mês da fatura (parcela de 06/10 → 06/12);
+  // - o resto mantém a data real e fica preso à fatura.
   const card = cardId ? s.cards.find((c) => c.id === cardId) : undefined;
   let period: { start: ISODate; end: ISODate } | null = null;
   if (card && statement.invoiceDueDate) {
-    const { start } = invoicePeriod(card, statement.invoiceDueDate);
+    const due = invoiceDueFor(card, statement.invoiceDueDate);
+    const { start, closingDate } = invoicePeriod(card, due);
     period = { start, end: statement.invoiceDueDate };
-    statement = { ...statement, lines: statement.lines.map((l) => (l.date < start ? { ...l, date: start } : l)) };
+    statement = {
+      ...statement,
+      lines: statement.lines.map((l) => {
+        if (l.date >= start && l.date <= closingDate) return l;
+        if (l.amount < 0 && detectInstallment(l.description)) return { ...l, date: installmentDateIn(card, due, l.date) };
+        return { ...l, invoiceDate: due };
+      }),
+    };
   }
   const used = new Set<string>(); // lançamentos/previsões já "casados" com uma linha
   const importedIds = new Set(s.transactions.map((t) => t.externalId).filter(Boolean));
@@ -725,11 +747,16 @@ export function buildImportRows(
       decision: 'importar',
       installment: kind === 'despesa' ? detectInstallment(line.description) : null,
       installmentChoice: 'so-esta',
+      invoiceDate: cardId ? (line.invoiceDate ?? null) : null,
     };
     const d = normalize(line.description);
 
     if (line.externalId && importedIds.has(line.externalId)) {
-      return { ...row, suggestion: { type: 'ja-importada' }, decision: 'pular' };
+      // importada antes com outra data (versão antiga do teo): aproveitamos para corrigir.
+      const before = s.transactions.find((t) => t.externalId === line.externalId);
+      const wrong = !!before && !!cardId && before.cardId === cardId &&
+        (before.date !== row.date || (before.invoiceDate ?? null) !== row.invoiceDate);
+      return { ...row, suggestion: { type: 'ja-importada', fix: wrong ? before : undefined }, decision: 'pular' };
     }
 
     const key = compactKey(line.description);
@@ -842,7 +869,9 @@ function cardPredictions(s: Snapshot, cardId: string, to: ISODate): Entry[] {
 export function suggestionText(sug: Suggestion, shortDate: (d: ISODate) => string): string {
   switch (sug.type) {
     case 'ja-importada':
-      return 'essa já foi importada antes, então vamos pular.';
+      return sug.fix
+        ? 'essa já foi importada antes, mas com a data errada. vamos só corrigir a data.'
+        : 'essa já foi importada antes, então vamos pular.';
     case 'pagamento-no-cartao':
       return 'é o pagamento da fatura. ele já aparece no extrato da conta, então vamos pular.';
     case 'parecida':

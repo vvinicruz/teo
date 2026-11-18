@@ -89,3 +89,57 @@ describe('planilha .xlsx', () => {
     expect(colunas.lines.map((l) => l.amount)).toEqual([383600, -120000]);
   });
 });
+
+describe('fatura: datas das compras', () => {
+  const card = { id: 'itau', name: 'itaú', closingDay: 14, dueDay: 21, creditLimit: null, createdAt: '' };
+  const base = (over: Partial<Snapshot> = {}): Snapshot => ({
+    settings: { name: '', initialBalance: 0, initialBalanceDate: '2026-01-01', reserve: 0, hideValues: false, onboarded: true },
+    categories: [], transactions: [], recurrences: [], budgets: [], goals: [], investments: [], accounts: [], cards: [card],
+    ...over,
+  });
+  // fatura aberta de dezembro (vence 21/12): o itaú incluiu compras de 12/11 a 16/11 e parcelas antigas
+  const grid = [
+    ['Fatura Aberta - Dezembro/2026'],
+    ['Cartão', 'Valor (parcial)', 'Vencimento'],
+    ['Itau', '100', '46377'],
+    ['Data', 'Lançamento', 'Parcelamento', 'Valor'],
+    ['46342', 'Sams Club', '', '328.84'], // 16/11
+    ['46340', 'Dominos Pizza', '', '86.8'], // 14/11
+    ['46338', '99food', '', '42.21'], // 12/11
+    ['46301', 'Parc Automatico', 'Parcela 3 de 12', '752.44'], // compra de 06/10
+    ['46154', 'Zp *Olx', 'Parcela 8 de 10', '51.98'], // compra de 12/05
+  ];
+
+  it('mantém a data real e prende à fatura certa as compras de antes do período', () => {
+    const rows = buildImportRows(base(), parseSpreadsheet(grid), { cardId: 'itau', accountId: null }, '2026-11-18');
+    expect(rows.map((r) => [r.description, r.date, r.invoiceDate])).toEqual([
+      ['sams club', '2026-11-16', null],
+      ['dominos pizza', '2026-11-14', '2026-12-21'],
+      ['99food', '2026-11-12', '2026-12-21'],
+      ['parc automatico 03/12', '2026-12-06', null],
+      ['zp *olx 08/10', '2026-12-12', null],
+    ]);
+  });
+
+  it('compra presa à fatura entra nela (e não na anterior)', async () => {
+    const { invoiceByDueDate } = await import('../finance');
+    const tx = (id: string, date: string, amount: number, invoiceDate?: string) => ({
+      id, kind: 'despesa' as const, amount, description: id, categoryId: null, date, status: 'realizada' as const,
+      paymentMethod: 'credito' as const, cardId: 'itau', invoiceDate: invoiceDate ?? null, createdAt: '',
+    });
+    const s = base({ transactions: [tx('presa', '2026-11-12', 4221, '2026-12-21'), tx('normal', '2026-11-12', 1000)] });
+    expect(invoiceByDueDate(s, card, '2026-12-21', '2026-11-18').total).toBe(4221);
+    expect(invoiceByDueDate(s, card, '2026-11-21', '2026-11-18').total).toBe(1000);
+  });
+
+  it('o que foi importado antes com a data errada é corrigido', () => {
+    const lines = parseSpreadsheet(grid).lines;
+    const antiga = {
+      id: 'x', kind: 'despesa' as const, amount: 4221, description: '99food', categoryId: null, date: '2026-11-15',
+      status: 'realizada' as const, paymentMethod: 'credito' as const, cardId: 'itau', externalId: lines[2].externalId, createdAt: '',
+    };
+    const rows = buildImportRows(base({ transactions: [antiga] }), parseSpreadsheet(grid), { cardId: 'itau', accountId: null }, '2026-11-18');
+    expect(rows[2].suggestion).toEqual({ type: 'ja-importada', fix: antiga });
+    expect(rows[2].date).toBe('2026-11-12');
+  });
+});

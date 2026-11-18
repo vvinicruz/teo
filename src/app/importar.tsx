@@ -148,17 +148,23 @@ export default function Importar() {
   const counts = useMemo(() => {
     const pending = rows.filter((r) => r.decision === null).length;
     const saving = rows.filter((r) => r.decision === 'importar' || r.decision === 'vincular').length;
-    return { pending, saving, skipped: rows.length - pending - saving };
+    // importadas antes com a data errada: só a data é corrigida
+    const fixing = rows.filter((r) => r.suggestion?.type === 'ja-importada' && r.suggestion.fix).length;
+    return { pending, saving, fixing, skipped: rows.length - pending - saving };
   }, [rows]);
 
   const questions = rows.filter((r) => r.suggestion && ['parecida', 'previsao', 'fatura'].includes(r.suggestion.type));
 
   const save = async () => {
-    if (counts.pending > 0 || counts.saving === 0) return;
+    if (counts.pending > 0 || counts.saving + counts.fixing === 0) return;
     setSaving(true);
     try {
-      const n = await importRows(rows, dest);
-      toast(`pronto! ${n} ${n === 1 ? 'movimentação importada' : 'movimentações importadas'}.`);
+      await importRows(rows, dest);
+      const parts = [
+        counts.saving ? `${counts.saving} ${counts.saving === 1 ? 'movimentação importada' : 'movimentações importadas'}` : '',
+        counts.fixing ? `${counts.fixing} ${counts.fixing === 1 ? 'data corrigida' : 'datas corrigidas'}` : '',
+      ].filter(Boolean);
+      toast(`pronto! ${parts.join(' e ')}.`);
       router.replace(cardId ? { pathname: '/cartao', params: { id: cardId } } : '/extrato');
     } catch {
       setSaving(false);
@@ -172,12 +178,14 @@ export default function Importar() {
         counts.pending > 0
           ? `responda ${counts.pending} ${counts.pending === 1 ? 'pergunta' : 'perguntas'}`
           : counts.saving === 0
-            ? 'nada para importar'
+            ? counts.fixing
+              ? `corrigir ${counts.fixing} ${counts.fixing === 1 ? 'data' : 'datas'}`
+              : 'nada para importar'
             : `importar ${counts.saving} ${counts.saving === 1 ? 'movimentação' : 'movimentações'}`
       }
       onPress={save}
       loading={saving}
-      disabled={counts.pending > 0 || counts.saving === 0}
+      disabled={counts.pending > 0 || counts.saving + counts.fixing === 0}
     />
   ) : undefined;
 
@@ -233,6 +241,7 @@ export default function Importar() {
               <Text variant="small" color={colors.textSoft}>
                 {rows.length} movimentações · {counts.saving} para salvar
                 {counts.skipped ? ` · ${counts.skipped} puladas` : ''}
+                {counts.fixing ? ` · ${counts.fixing} com a data a corrigir` : ''}
               </Text>
             </View>
             <Button label="trocar" variant="ghost" small onPress={pick} loading={reading} />
@@ -393,7 +402,9 @@ function ImportLine({
     row.decision === null
       ? 'aguardando sua resposta'
       : row.suggestion?.type === 'ja-importada'
-        ? 'já importada antes'
+        ? row.suggestion.fix
+          ? 'já importada · vamos corrigir a data'
+          : 'já importada antes'
         : row.suggestion?.type === 'pagamento-no-cartao'
           ? 'pagamento da fatura (já está na conta)'
           : row.decision === 'pular' && row.suggestion?.type === 'parecida'

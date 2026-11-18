@@ -58,6 +58,8 @@ export interface Entry {
   cardId?: string;
   /** presente nas previsões de fatura: vencimento da fatura. */
   invoiceDate?: ISODate;
+  /** compra no cartão presa a uma fatura (vencimento), quando o banco a colocou numa fatura diferente da que a data indica. */
+  cardInvoice?: ISODate;
   /** guardar/resgatar numa caixinha. */
   investmentId?: string;
   /** conta bancária (vazio = conta principal). */
@@ -141,6 +143,7 @@ function txToEntry(t: Transaction, todayDate: ISODate, shiftOverdue: boolean): E
     investmentId: t.investmentId ?? undefined,
     accountId: t.accountId ?? undefined,
     transferId: t.transferId ?? undefined,
+    cardInvoice: t.cardId && !t.paysCardId && t.invoiceDate ? t.invoiceDate : undefined,
   };
 }
 
@@ -225,6 +228,22 @@ export function invoiceOf(card: Card, purchaseDate: ISODate): { closingDate: ISO
   return { closingDate: closing, dueDate: dueDateFor(card, closing) };
 }
 
+/** vencimento, no teo, da fatura que o banco diz vencer em `bankDueDate` (o banco adia vencimentos de fim de semana). */
+export function invoiceDueFor(card: Card, bankDueDate: ISODate): ISODate {
+  return dueDateFor(card, invoicePeriod(card, bankDueDate).closingDate);
+}
+
+/** dia da compra parcelada dentro do período de uma fatura (parcela de 06/10 numa fatura de dezembro → 06/12). */
+export function installmentDateIn(card: Card, dueDate: ISODate, purchaseDate: ISODate): ISODate {
+  const { start, closingDate } = invoicePeriod(card, dueDate);
+  const day = Number(purchaseDate.slice(8, 10));
+  for (const m of [monthOf(start), monthOf(closingDate)]) {
+    const d = dayIn(m, day);
+    if (d >= start && d <= closingDate) return d;
+  }
+  return start;
+}
+
 /** período de compras de uma fatura, a partir do vencimento. */
 export function invoicePeriod(card: Card, dueDate: ISODate): { start: ISODate; closingDate: ISODate } {
   const closingMonth = card.dueDay > card.closingDay ? monthOf(dueDate) : addMonths(monthOf(dueDate), -1);
@@ -280,7 +299,11 @@ export function cardInvoices(
 ): Invoice[] {
   const groups = new Map<ISODate, { closingDate: ISODate; items: Entry[] }>();
   for (const item of cardItems(s, card, to, todayDate, opts)) {
-    const { closingDate, dueDate } = invoiceOf(card, item.originalDate);
+    // o banco pode colocar uma compra numa fatura diferente da que a data indica (ex.: compra feita
+    // dois dias antes do fechamento que só entrou na fatura seguinte). nesse caso ela fica presa à fatura.
+    const { closingDate, dueDate } = item.cardInvoice
+      ? { closingDate: invoicePeriod(card, item.cardInvoice).closingDate, dueDate: item.cardInvoice }
+      : invoiceOf(card, item.originalDate);
     const g = groups.get(dueDate) ?? { closingDate, items: [] };
     g.items.push(item);
     groups.set(dueDate, g);

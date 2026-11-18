@@ -300,11 +300,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const items: Transaction[] = [];
         const recurrences: Recurrence[] = [];
         for (const row of rows) {
+          // importada antes com a data errada: só corrige a data (e a fatura em que entrou).
+          if (row.suggestion?.type === 'ja-importada' && row.suggestion.fix) {
+            items.push({ ...row.suggestion.fix, date: row.date, invoiceDate: row.invoiceDate });
+            continue;
+          }
           // "é a mesma": o registro passa a ficar onde o extrato diz (cartão ou conta).
           if (row.decision === 'pular' && row.suggestion?.type === 'parecida') {
             const t = row.suggestion.transaction;
             if (cardId) {
-              if (t.cardId !== cardId) items.push({ ...t, cardId, accountId: null, status: 'realizada', paymentMethod: 'credito' });
+              if (t.cardId !== cardId || row.invoiceDate)
+                items.push({ ...t, cardId, accountId: null, status: 'realizada', paymentMethod: 'credito', invoiceDate: row.invoiceDate ?? t.invoiceDate ?? null });
             } else if ((t.accountId ?? null) !== accountId) {
               items.push({ ...t, accountId });
             }
@@ -327,6 +333,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
               paymentMethod: cardId ? 'credito' : (row.line.method ?? null),
               cardId,
               accountId: cardId ? null : accountId,
+              ...(cardId && row.invoiceDate ? { invoiceDate: row.invoiceDate } : {}),
               createdAt: now,
               ...fromStatement,
             };
