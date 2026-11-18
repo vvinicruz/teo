@@ -26,10 +26,12 @@ import { useData } from '../data/DataProvider';
 import { friendlyDate, shortDate } from '../domain/dates';
 import { formatMoney } from '../domain/money';
 import { maskedLayout } from '../domain/pdfLayout';
+import { isZip, readXlsx } from '../domain/spreadsheet';
 import {
   buildImportRows,
   decodeBytes,
   parsePdfPages,
+  parseSpreadsheet,
   parseStatement,
   suggestionText,
   type Decision,
@@ -88,11 +90,20 @@ export default function Importar() {
           );
           return;
         }
+      } else if (isZip(file.bytes)) {
+        // planilha .xlsx (excel), como a "fatura fechada" do itaú
+        st = parseSpreadsheet(readXlsx(file.bytes));
+        if (!st.lines.length) {
+          setError(
+            'não encontramos movimentações nessa planilha. ela precisa ter colunas de data, lançamento e valor. se for de um banco que o teo ainda não lê, manda um exemplo pra gente (contato@appteo.com.br).',
+          );
+          return;
+        }
       } else {
         st = parseStatement(decodeBytes(file.bytes));
       }
       if (!st.lines.length) {
-        setError('não encontramos movimentações nesse arquivo. confere se ele é .ofx, .csv ou a fatura em .pdf, baixado no app ou site do banco?');
+        setError('não encontramos movimentações nesse arquivo. confere se ele é .ofx, .csv, a planilha .xlsx ou a fatura em .pdf, baixado no app ou site do banco?');
         return;
       }
       // arquivo de cartão e só um cartão cadastrado: já escolhemos ele.
@@ -208,7 +219,7 @@ export default function Importar() {
           <View style={styles.help}>
             <Icon as={Info} size={16} color={colors.textFaint} />
             <Text variant="small" color={colors.textFaint} style={{ flex: 1 }}>
-              {'aceitamos .ofx, .csv e .pdf (extrato da conta ou fatura do cartão). no app ou site do banco, procure por “exportar extrato” ou “baixar fatura”. o arquivo é lido aqui mesmo e não é enviado para lugar nenhum.'}
+              {'aceitamos .ofx, .csv, planilha .xlsx e .pdf (extrato da conta ou fatura do cartão). no app ou site do banco, procure por “exportar extrato” ou “baixar fatura”. o arquivo é lido aqui mesmo e não é enviado para lugar nenhum.'}
             </Text>
           </View>
         </View>

@@ -129,7 +129,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: 'importar o extrato do banco',
     summary: 'pra quando faltar tempo de registrar.',
     paragraphs: [
-      'no app ou site do banco, procure "exportar extrato" ou "baixar fatura" e salve o arquivo .ofx, .csv ou a fatura do cartão em .pdf. no teo, vá em extrato → importar e escolha o arquivo.',
+      'no app ou site do banco, procure "exportar extrato" ou "baixar fatura" e salve o arquivo .ofx, .csv, a planilha .xlsx (como a da fatura do itaú) ou a fatura do cartão em .pdf. no teo, vá em extrato → importar e escolha o arquivo.',
       'o teo sugere as categorias e pergunta quando algo parece repetido ("é a mesma?"). você confere tudo antes de salvar.',
       'o arquivo é lido só no seu aparelho e não é guardado. mas registrar no dia a dia ainda é o melhor jeito de perceber pra onde o dinheiro vai.',
     ],

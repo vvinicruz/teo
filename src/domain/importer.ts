@@ -1,5 +1,5 @@
 /**
- * importação de extratos (ofx e csv).
+ * importação de extratos (ofx, csv, planilha .xlsx e pdf).
  *
  * tudo acontece no aparelho: o arquivo do banco não é enviado para lugar nenhum.
  * só as movimentações que a pessoa confirmar são salvas, como se tivessem sido digitadas.
@@ -24,7 +24,7 @@ export interface StatementLine {
 }
 
 export interface ParsedStatement {
-  format: 'ofx' | 'csv' | 'pdf';
+  format: 'ofx' | 'csv' | 'pdf' | 'xlsx';
   lines: StatementLine[];
   /** o arquivo parece ser de cartão de crédito. */
   looksLikeCard: boolean;
@@ -208,6 +208,83 @@ export function parseCSV(text: string): ParsedStatement {
   const looksLikeCard = header.includes('title') && positives > lines.length / 2;
   if (looksLikeCard) for (const l of lines) l.amount = -l.amount;
   return { format: 'csv', lines, looksLikeCard };
+}
+
+// ---------- planilha .xlsx (itaú e outros) ----------
+
+/** data de uma célula: número de dias do excel (46332 = 06/11/2026), "06/11/2026" ou "2026-11-06". */
+function sheetDate(raw: string): ISODate | null {
+  const v = raw.trim();
+  if (/^\d{5}(\.\d+)?$/.test(v)) return addDays('1899-12-30', Math.floor(Number(v)));
+  return csvDate(v);
+}
+
+/** valor de uma célula: número do excel ("56.9", "-1299.65") ou texto ("R$ 56,90"). */
+function sheetMoney(raw: string): Cents | null {
+  const v = raw.trim();
+  if (/^-?\d+(\.\d+)?(e-?\d+)?$/i.test(v)) return Math.round(Number(v) * 100);
+  return parseMoney(v);
+}
+
+const INSTALLMENT_COLS = ['parcelamento', 'parcela', 'parcelas'];
+const CREDIT_COLS = ['credito', 'creditos', 'entrada', 'entradas'];
+const DEBIT_COLS = ['debito', 'debitos', 'saida', 'saidas'];
+
+/**
+ * lê a planilha do banco: procura a linha de cabeçalho (data, lançamento, valor...) e lê as linhas abaixo.
+ * fatura de cartão (ex.: itaú "fatura fechada"): compras vêm positivas e pagamentos/estornos negativos.
+ * extrato de conta: o valor já vem com o sinal (ou em colunas de entrada e saída).
+ */
+export function parseSpreadsheet(grid: string[][]): ParsedStatement {
+  const norm = grid.map((row) => row.map((c) => normalize(c ?? '').trim()));
+  const all = norm.flat().join(' ');
+  const looksLikeCard = /fatura|cartao/.test(all);
+
+  const headerAt = norm.findIndex(
+    (row) =>
+      row.some((c) => DATE_COLS.includes(c)) &&
+      row.some((c) => DESC_COLS.includes(c)) &&
+      (row.some((c) => AMOUNT_COLS.includes(c)) || row.some((c) => DEBIT_COLS.includes(c))),
+  );
+  if (headerAt < 0) return { format: 'xlsx', lines: [], looksLikeCard };
+  const header = norm[headerAt];
+  const col = (names: string[]) => header.findIndex((c) => names.includes(c));
+  const iDate = col(DATE_COLS);
+  const iDesc = col(DESC_COLS);
+  const iAmount = col(AMOUNT_COLS);
+  const iCredit = col(CREDIT_COLS);
+  const iDebit = col(DEBIT_COLS);
+  const iInstallment = col(INSTALLMENT_COLS);
+
+  // vencimento da fatura: célula "vencimento" com a data logo abaixo
+  let invoiceDueDate: ISODate | null = null;
+  for (let r = 0; r < headerAt && !invoiceDueDate; r++) {
+    const c = norm[r].indexOf('vencimento');
+    if (c >= 0) invoiceDueDate = sheetDate(grid[r + 1]?.[c] ?? '');
+  }
+
+  const lines: StatementLine[] = [];
+  const seen = new Map<string, number>();
+  for (const row of grid.slice(headerAt + 1)) {
+    const date = sheetDate(row[iDate] ?? '');
+    const rawDesc = (row[iDesc] ?? '').trim();
+    if (!date || !rawDesc) continue;
+    let value: Cents | null;
+    if (iAmount >= 0) value = sheetMoney(row[iAmount] ?? '');
+    else value = (sheetMoney(row[iCredit] ?? '') ?? 0) - Math.abs(sheetMoney(row[iDebit] ?? '') ?? 0);
+    if (!value) continue;
+    // na fatura, compra positiva = dinheiro saindo
+    const amount = looksLikeCard && iAmount >= 0 ? -value : value;
+    // "parcela 2 de 12" vira "02/12" no nome, como nas faturas em pdf
+    const parcel = normalize(row[iInstallment] ?? '').match(/(\d{1,2})\s*(?:de|\/)\s*(\d{1,2})/);
+    const withParcel = parcel ? `${rawDesc} ${parcel[1].padStart(2, '0')}/${parcel[2].padStart(2, '0')}` : rawDesc;
+    const { description, method } = cleanDescription(withParcel);
+    const base = `xlsx:${date}:${description}:${amount}`;
+    const n = (seen.get(base) ?? 0) + 1;
+    seen.set(base, n);
+    lines.push({ date, amount, description, method, externalId: `${base}:${n}` });
+  }
+  return { format: 'xlsx', lines, looksLikeCard, invoiceDueDate };
 }
 
 // ---------- fatura em pdf (itaú e parecidos) ----------
