@@ -6,6 +6,7 @@ import {
   BankBadge,
   Card,
   CategoryIcon,
+  Columns,
   EmptyState,
   EntryRow,
   FadeIn,
@@ -120,7 +121,7 @@ export default function Inicio() {
         : `você está indo bem! a previsão é fechar o mês com ${hide ? 'saldo positivo' : formatMoney(h.projectedEnd)}.`;
 
   return (
-    <Screen tabBarSpace>
+    <Screen tabBarSpace width="wide">
       {/* topo */}
       <View style={styles.top}>
         <TourTarget id="home-perfil">
@@ -155,6 +156,11 @@ export default function Inicio() {
         </Pressable>
       ) : null}
 
+      {/* no computador: o dinheiro de hoje à esquerda; cartões, categorias e movimentações à direita */}
+      <Columns
+        ratio={1.1}
+        left={
+          <>
       {/* saldo */}
       <TourTarget id="home-saldo">
       <FadeIn>
@@ -318,6 +324,10 @@ export default function Inicio() {
         )}
       </Section>
 
+          </>
+        }
+        right={
+          <>
       {view.cards.length ? (
         <Section title="cartões" actionLabel="ver cartões" onAction={() => router.push('/cartoes')}>
           <Card padded={false} style={styles.list}>
@@ -406,6 +416,10 @@ export default function Inicio() {
           </Card>
         )}
       </Section>
+
+          </>
+        }
+      />
 
       <Pressable onPress={() => router.push('/ajuda')} style={styles.helpLink} accessibilityRole="link">
         <Icon as={LifeBuoy} size={16} color={colors.primary} />

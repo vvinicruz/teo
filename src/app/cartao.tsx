@@ -54,7 +54,7 @@ export default function CartaoDetalhe() {
 
   if (!card || !invoice) {
     return (
-      <Screen back title="cartão">
+      <Screen width="medium" back title="cartão">
         <Text color={colors.textSoft} center style={{ marginTop: space.xxxl }}>
           esse cartão não existe mais.
         </Text>
@@ -132,7 +132,7 @@ export default function CartaoDetalhe() {
   };
 
   return (
-    <Screen
+    <Screen width="medium"
       back
       title={card.name}
       right={<IconButton icon={Pencil} label="editar cartão" onPress={() => router.push({ pathname: '/cartao-form', params: { id: card.id } })} background={colors.surface} />}

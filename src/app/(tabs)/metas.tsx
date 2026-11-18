@@ -66,7 +66,7 @@ export default function Metas() {
   const open = (g: Goal) => router.push({ pathname: '/objetivo', params: { id: g.id } });
 
   return (
-    <Screen tabBarSpace>
+    <Screen width="medium" tabBarSpace>
       <View style={styles.titleRow}>
         <Text variant="title">metas</Text>
         <TourTarget id="metas-nova">

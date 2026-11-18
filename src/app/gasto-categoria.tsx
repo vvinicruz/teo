@@ -86,7 +86,7 @@ export default function GastoCategoria() {
   };
 
   return (
-    <Screen back title={name}>
+    <Screen width="medium" back title={name}>
       <View style={styles.monthRow}>
         <IconButton icon={ChevronLeft} label="mês anterior" onPress={() => setMonth(addMonths(month, -1))} />
         <Text variant="bodyStrong">{monthName(month, month.slice(0, 4) !== todayDate.slice(0, 4))}</Text>

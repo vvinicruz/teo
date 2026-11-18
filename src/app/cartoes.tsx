@@ -40,7 +40,7 @@ export default function Cartoes() {
   );
 
   return (
-    <Screen
+    <Screen width="medium"
       back
       title="cartões de crédito"
       right={

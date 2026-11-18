@@ -206,7 +206,7 @@ export default function Importar() {
   ) : undefined;
 
   return (
-    <Screen
+    <Screen width="medium"
       title="importar extrato"
       right={<IconButton icon={X} label="fechar" onPress={close} background={colors.surface} />}
       footer={footer}

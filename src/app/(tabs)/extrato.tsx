@@ -90,7 +90,7 @@ export default function Extrato() {
   };
 
   return (
-    <Screen tabBarSpace>
+    <Screen width="medium" tabBarSpace>
       <View style={styles.titleRow}>
         <Text variant="title">extrato</Text>
         <TourTarget id="ext-importar">

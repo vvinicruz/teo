@@ -51,7 +51,7 @@ export default function Imposto() {
   const done = items.filter((i) => checked.has(i.id)).length;
 
   return (
-    <Screen back title="imposto de renda">
+    <Screen width="medium" back title="imposto de renda">
       <FadeIn>
         <Card tone="cream" style={styles.status}>
           <View style={styles.statusHead}>

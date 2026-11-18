@@ -69,7 +69,7 @@ export default function Contas() {
   const nameOf = (id: string | null) => list.find((a) => a.id === id)?.name ?? '';
 
   return (
-    <Screen
+    <Screen width="medium"
       back
       title="contas e cartões"
       right={<IconButton icon={Plus} label="nova conta" onPress={() => router.push('/conta-form')} background={colors.cream} color={colors.primary} />}

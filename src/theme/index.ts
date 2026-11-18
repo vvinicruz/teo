@@ -87,4 +87,10 @@ export const shadow = {
 /** largura máxima do conteúdo em telas grandes (web/tablet). */
 export const MAX_WIDTH = 560;
 
+/** computador: a partir desta largura, o teo mostra a barra lateral e telas mais largas. */
+export const DESKTOP_MIN = 1024;
+/** larguras do conteúdo no computador: formulários (estreita), listas (média) e painéis (larga). */
+export const DESKTOP_WIDTH = { narrow: 560, medium: 760, wide: 1120 } as const;
+export const SIDEBAR_WIDTH = 252;
+
 export { BANK_STYLES, type BankStyle } from './banks';

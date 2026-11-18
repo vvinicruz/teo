@@ -120,7 +120,7 @@ export default function Perfil() {
   };
 
   return (
-    <Screen back title="perfil">
+    <Screen width="medium" back title="perfil">
       <View style={styles.hero}>
         <View style={styles.avatar}>
           <Text variant="title" color={colors.primary}>

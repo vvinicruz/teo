@@ -65,7 +65,7 @@ export default function Recorrencias() {
   };
 
   return (
-    <Screen
+    <Screen width="medium"
       back
       title="contas fixas e recorrências"
       right={<IconButton icon={Plus} label="nova recorrência" onPress={() => router.push('/recorrencia')} background={colors.cream} color={colors.primary} />}

@@ -29,7 +29,7 @@ export default function Guardado() {
   const hide = data.settings.hideValues;
 
   return (
-    <Screen
+    <Screen width="medium"
       back
       title="caixinhas e investimentos"
       right={<IconButton icon={Plus} label="nova caixinha" onPress={() => router.push('/caixinha-form')} background={colors.cream} color={colors.primary} />}

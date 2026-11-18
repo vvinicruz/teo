@@ -4,6 +4,7 @@ import { CalendarDays, House, Plus, ReceiptText, Target, type LucideIcon } from 
 import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, Pressable, Text, TourTarget } from '../../components';
+import { useDesktop } from '../../hooks/useDesktop';
 import { colors, MAX_WIDTH, radius, shadow, space } from '../../theme';
 
 const TABS: Record<string, { label: string; icon: LucideIcon }> = {
@@ -14,10 +15,12 @@ const TABS: Record<string, { label: string; icon: LucideIcon }> = {
 };
 
 export default function TabsLayout() {
+  const desktop = useDesktop();
   return (
     <Tabs
       screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: colors.background } }}
-      tabBar={(props) => <TabBar {...props} />}
+      // no computador, a navegação fica na barra lateral
+      tabBar={(props) => (desktop ? null : <TabBar {...props} />)}
     >
       <Tabs.Screen name="index" />
       <Tabs.Screen name="horizonte" />

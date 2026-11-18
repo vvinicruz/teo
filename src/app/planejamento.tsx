@@ -72,7 +72,7 @@ export default function GastosPorCategoria() {
   };
 
   return (
-    <Screen back title="gastos por categoria">
+    <Screen width="medium" back title="gastos por categoria">
       <View style={styles.monthRow}>
         <IconButton icon={ChevronLeft} label="mês anterior" onPress={() => setMonth(addMonths(month, -1))} />
         <Text variant="bodyStrong">{monthName(month, month.slice(0, 4) !== todayDate.slice(0, 4))}</Text>

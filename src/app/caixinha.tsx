@@ -52,7 +52,7 @@ export default function Caixinha() {
 
   if (!inv) {
     return (
-      <Screen back title="caixinha">
+      <Screen width="medium" back title="caixinha">
         <Text color={colors.textSoft} center style={{ marginTop: space.xxxl }}>
           essa caixinha não existe mais.
         </Text>
@@ -81,7 +81,7 @@ export default function Caixinha() {
   };
 
   return (
-    <Screen
+    <Screen width="medium"
       back
       title={inv.name}
       right={<IconButton icon={Pencil} label="editar caixinha" onPress={() => router.push({ pathname: '/caixinha-form', params: { id: inv.id } })} background={colors.surface} />}

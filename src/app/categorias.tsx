@@ -91,7 +91,7 @@ export default function Categorias() {
   };
 
   return (
-    <Screen
+    <Screen width="medium"
       back
       title="categorias"
       right={<IconButton icon={Plus} label="nova categoria" onPress={() => open('nova')} background={colors.cream} color={colors.primary} />}

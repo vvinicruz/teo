@@ -59,7 +59,7 @@ export default function Objetivo() {
 
   if (!goal || !view) {
     return (
-      <Screen back title="meta">
+      <Screen width="medium" back title="meta">
         <Text color={colors.textSoft} center style={{ marginTop: space.xxxl }}>
           essa meta não existe mais.
         </Text>
@@ -138,7 +138,7 @@ export default function Objetivo() {
       : 'guarde um pouquinho para o teo calcular quando você chega lá.';
 
   return (
-    <Screen
+    <Screen width="medium"
       back
       title={goal.name}
       right={<IconButton icon={Pencil} label="editar meta" onPress={() => router.push({ pathname: '/meta', params: { id: goal.id } })} background={colors.surface} />}

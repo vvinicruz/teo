@@ -9,9 +9,10 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Button, FeedbackProvider, GoalCelebration, Logo, Text, TourProvider, UpdateBanner } from '../components';
+import { Button, FeedbackProvider, GoalCelebration, Logo, Sidebar, Text, TourProvider, UpdateBanner } from '../components';
 import { AuthProvider, useAuth } from '../data/AuthProvider';
 import { DataProvider, useData } from '../data/DataProvider';
+import { useDesktop } from '../hooks/useDesktop';
 import { colors, space } from '../theme';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -50,6 +51,7 @@ export default function RootLayout() {
 function Gate() {
   const auth = useAuth();
   const { status, data, retry } = useData();
+  const desktop = useDesktop();
 
   if (auth.status === 'loading' || (auth.status === 'signedIn' && status === 'loading')) {
     return (
@@ -85,6 +87,11 @@ function Gate() {
   return (
     <>
     {onboarded ? <GoalCelebration /> : null}
+    {/* no computador, a barra lateral fica ao lado de todas as telas. a estrutura é sempre a mesma
+        (a barra só aparece ou some), para a navegação não recomeçar ao redimensionar a janela. */}
+    <View style={styles.shell}>
+    {desktop && onboarded ? <Sidebar /> : null}
+    <View style={{ flex: 1 }}>
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background }, animation: 'fade_from_bottom' }}>
       <Stack.Protected guard={!signedIn} redirectTo={home}>
         <Stack.Screen name="entrar" />
@@ -120,11 +127,14 @@ function Gate() {
       <Stack.Screen name="termos" options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="privacidade" options={{ animation: 'slide_from_right' }} />
     </Stack>
+    </View>
+    </View>
     <UpdateBanner />
     </>
   );
 }
 
 const styles = StyleSheet.create({
+  shell: { flex: 1, flexDirection: 'row', backgroundColor: colors.background },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background, padding: space.xl },
 });

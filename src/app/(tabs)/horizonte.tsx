@@ -5,6 +5,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Card,
+  Columns,
   CategoryIcon,
   FadeIn,
   Icon,
@@ -23,10 +24,13 @@ import { useCategories } from '../../hooks/useCategories';
 import { useToday } from '../../hooks/useToday';
 import { BALANCE_COLOR, BALANCE_SOFT } from '../../lib/balanceTone';
 import { openEntry } from '../../lib/navigation';
-import { colors, MAX_WIDTH, radius, space } from '../../theme';
+import { useDesktop } from '../../hooks/useDesktop';
+import { colors, DESKTOP_WIDTH, MAX_WIDTH, radius, space } from '../../theme';
 
 export default function Horizonte() {
   const insets = useSafeAreaInsets();
+  const desktop = useDesktop();
+  const maxWidth = desktop ? DESKTOP_WIDTH.wide : MAX_WIDTH;
   const { data } = useData();
   const todayDate = useToday();
   const thisMonth = monthOf(todayDate);
@@ -50,7 +54,7 @@ export default function Horizonte() {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
+      <View style={[styles.header, { maxWidth }, desktop && { paddingTop: space.xl }]}>
         <IconButton icon={ChevronLeft} label="mês anterior" onPress={() => setMonth(addMonths(month, -1))} />
         <Pressable onPress={() => setMonth(thisMonth)} style={{ alignItems: 'center' }} accessibilityLabel="voltar para este mês">
           <Text variant="caption" color={colors.textSoft}>
@@ -61,8 +65,13 @@ export default function Horizonte() {
         <IconButton icon={ChevronRight} label="próximo mês" onPress={() => setMonth(addMonths(month, 1))} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
-        <View style={styles.inner}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: desktop ? space.xxxl : 120 }}>
+        <View style={[styles.inner, { maxWidth }]}>
+          {/* no computador: o resumo do mês à esquerda, os dias à direita */}
+          <Columns
+            ratio={0.8}
+            stickyLeft
+            left={<>
           <TourTarget id="hz-resumo">
           <FadeIn key={month}>
             <Card style={{ gap: space.lg }}>
@@ -128,6 +137,8 @@ export default function Horizonte() {
           </FadeIn>
           </TourTarget>
 
+            </>}
+            right={<>
           {pastDays.length > 0 ? (
             <Pressable onPress={() => setPastOpenFor(showPast ? null : month)} style={styles.pastToggle} accessibilityRole="button">
               <Icon as={showPast ? ChevronUp : ChevronDown} size={18} color={colors.textSoft} />
@@ -153,6 +164,8 @@ export default function Horizonte() {
             ))}
           </View>
           </TourTarget>
+            </>}
+          />
         </View>
       </ScrollView>
 

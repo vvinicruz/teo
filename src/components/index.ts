@@ -32,3 +32,5 @@ export * from './GoalNudgeCard';
 export * from './UpdateBanner';
 export * from './BankBadge';
 export * from './Tour';
+export * from './Columns';
+export * from './Sidebar';

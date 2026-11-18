@@ -3,7 +3,8 @@ import { router } from 'expo-router';
 import type { ReactNode } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, type ScrollViewProps } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, MAX_WIDTH, space } from '../theme';
+import { useDesktop } from '../hooks/useDesktop';
+import { colors, DESKTOP_WIDTH, MAX_WIDTH, space } from '../theme';
 import { IconButton } from './IconButton';
 import { Text } from './Text';
 
@@ -19,13 +20,18 @@ interface Props {
   /** espaço extra no fim para a barra de navegação. */
   tabBarSpace?: boolean;
   scrollProps?: ScrollViewProps;
+  /** largura no computador: estreita (formulários), média (listas) ou larga (painéis). */
+  width?: keyof typeof DESKTOP_WIDTH;
 }
 
-export function Screen({ children, title, back, right, footer, scroll = true, tabBarSpace, scrollProps }: Props) {
+export function Screen({ children, title, back, right, footer, scroll = true, tabBarSpace, scrollProps, width = 'narrow' }: Props) {
   const insets = useSafeAreaInsets();
+  const desktop = useDesktop();
+  // no computador não há barra embaixo, e o conteúdo pode ser mais largo
+  const maxWidth = desktop ? DESKTOP_WIDTH[width] : MAX_WIDTH;
   const header =
     title || back || right ? (
-      <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
+      <View style={[styles.header, { paddingTop: insets.top + (desktop ? space.xl : space.sm), maxWidth }]}>
         <View style={styles.headerSide}>
           {back ? (
             <IconButton
@@ -49,8 +55,10 @@ export function Screen({ children, title, back, right, footer, scroll = true, ta
       <View style={{ height: insets.top }} />
     );
 
-  const bottomPad = (tabBarSpace ? 110 : space.xxxl) + (footer ? 0 : insets.bottom);
-  const content = <View style={styles.inner}>{children}</View>;
+  const bottomPad = (tabBarSpace && !desktop ? 110 : space.xxxl) + (footer ? 0 : insets.bottom);
+  const content = (
+    <View style={[styles.inner, { maxWidth }, desktop && { paddingTop: space.md }]}>{children}</View>
+  );
 
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -69,7 +77,7 @@ export function Screen({ children, title, back, right, footer, scroll = true, ta
       )}
       {footer ? (
         <View style={[styles.footer, { paddingBottom: insets.bottom + space.lg }]}>
-          <View style={styles.footerInner}>{footer}</View>
+          <View style={[styles.footerInner, { maxWidth }]}>{footer}</View>
         </View>
       ) : null}
     </KeyboardAvoidingView>

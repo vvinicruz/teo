@@ -2,6 +2,7 @@ import { nativeDriver } from '../lib/platform';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useAnimatedValue } from '../hooks/useAnimatedValue';
+import { useDesktop } from '../hooks/useDesktop';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, MAX_WIDTH, radius, space } from '../theme';
 import { Text } from './Text';
@@ -16,6 +17,7 @@ interface Props {
 /** painel que sobe de baixo. usado para escolhas rápidas sem trocar de tela. */
 export function Sheet({ visible, onClose, title, children }: Props) {
   const insets = useSafeAreaInsets();
+  const desktop = useDesktop();
   const [mounted, setMounted] = useState(visible);
   const anim = useAnimatedValue(0);
 
@@ -39,15 +41,21 @@ export function Sheet({ visible, onClose, title, children }: Props) {
       <Animated.View style={[StyleSheet.absoluteFill, styles.overlay, { opacity: anim }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="fechar" />
       </Animated.View>
-      <View style={styles.anchor} pointerEvents="box-none">
+      <View style={[styles.anchor, desktop && styles.anchorCenter]} pointerEvents="box-none">
         <Animated.View
           style={[
             styles.sheet,
-            { paddingBottom: insets.bottom + space.xl },
-            { transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [500, 0] }) }] },
+            desktop ? styles.dialog : { paddingBottom: insets.bottom + space.xl },
+            {
+              transform: [
+                // no computador, aparece no meio da tela, subindo só um pouquinho
+                { translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [desktop ? 24 : 500, 0] }) },
+              ],
+            },
+            desktop && { opacity: anim },
           ]}
         >
-          <View style={styles.handle} />
+          {desktop ? null : <View style={styles.handle} />}
           {title ? (
             <Text variant="heading" style={styles.title}>
               {title}
@@ -65,6 +73,7 @@ export function Sheet({ visible, onClose, title, children }: Props) {
 const styles = StyleSheet.create({
   overlay: { backgroundColor: colors.overlay },
   anchor: { flex: 1, justifyContent: 'flex-end', alignItems: 'center' },
+  anchorCenter: { justifyContent: 'center', padding: space.xl },
   sheet: {
     width: '100%',
     maxWidth: MAX_WIDTH,
@@ -77,4 +86,5 @@ const styles = StyleSheet.create({
   },
   handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: colors.line, marginBottom: space.lg },
   title: { marginBottom: space.lg },
+  dialog: { maxWidth: 520, borderRadius: radius.xl, paddingTop: space.xl, paddingBottom: space.xl },
 });
