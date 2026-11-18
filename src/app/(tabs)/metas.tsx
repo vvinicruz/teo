@@ -17,6 +17,7 @@ import {
   ProgressBar,
   Screen,
   Text,
+  TourTarget,
 } from '../../components';
 import { useData } from '../../data/DataProvider';
 import { monthName } from '../../domain/dates';
@@ -68,7 +69,9 @@ export default function Metas() {
     <Screen tabBarSpace>
       <View style={styles.titleRow}>
         <Text variant="title">metas</Text>
-        <Button label="nova meta" icon={Plus} small onPress={() => router.push('/meta')} />
+        <TourTarget id="metas-nova">
+          <Button label="nova meta" icon={Plus} small onPress={() => router.push('/meta')} />
+        </TourTarget>
       </View>
 
       {nudge ? (
@@ -77,6 +80,7 @@ export default function Metas() {
         </View>
       ) : null}
 
+      <TourTarget id="metas-guardado">
       <Card tone="cream" onPress={() => router.push('/guardado')} style={styles.saved}>
         <CategoryIcon icon="reserva" size={44} tone="primary" />
         <View style={{ flex: 1 }}>
@@ -98,6 +102,7 @@ export default function Metas() {
         </View>
         <Icon as={ChevronRight} color={colors.primary} />
       </Card>
+      </TourTarget>
 
       {!featured ? (
         <EmptyState

@@ -12,7 +12,9 @@ import {
   Text,
   TextField,
   useFeedback,
+  useTour,
 } from '../components';
+import { FIRST_TOUR } from '../content/tours';
 import { useAuth } from '../data/AuthProvider';
 import { useData } from '../data/DataProvider';
 import { monthOf, today } from '../domain/dates';
@@ -24,6 +26,7 @@ export default function BoasVindas() {
   const { mode } = useAuth();
   const { data, updateSettings, addRecurrence } = useData();
   const { toast } = useFeedback();
+  const tour = useTour();
   const [step, setStep] = useState<Step>(0);
   const [name, setName] = useState('');
   const [balance, setBalance] = useState(0);
@@ -61,6 +64,8 @@ export default function BoasVindas() {
         initialBalanceDate: today(),
         onboarded: true,
       });
+      // conta nova: o passo a passo começa assim que a tela inicial aparecer
+      tour.start(FIRST_TOUR, { delay: 900 });
     } catch {
       toast('não conseguimos salvar agora. tenta de novo?', 'erro');
       setSaving(false);

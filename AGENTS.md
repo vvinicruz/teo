@@ -50,3 +50,4 @@ Docs: https://docs.expo.dev/eas/index.md
 - use os componentes de `src/components` e os tokens de `src/theme`; não crie cores soltas.
 - o comando `npx expo install` precisa de `EXPO_OFFLINE=1` em ambientes sem acesso à api do expo.
 - antes de concluir: `npm test`, `npx tsc --noEmit` e `npx expo lint`.
+- passo a passo (tour de primeiro uso): roteiros em `src/content/tours.ts`; as partes destacadas são marcadas na tela com `<TourTarget id="...">`. ao criar ou mudar uma funcionalidade (correções não), atualize o roteiro da tela correspondente. ao terminar uma criação/atualização, pergunte ao vinícius se ele quer que o passo a passo seja atualizado já ou depois que ele testar e finalizar.

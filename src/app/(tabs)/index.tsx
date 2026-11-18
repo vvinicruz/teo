@@ -19,6 +19,7 @@ import {
   Screen,
   Section,
   Text,
+  TourTarget,
   useFeedback,
 } from '../../components';
 import { useAuth } from '../../data/AuthProvider';
@@ -122,11 +123,13 @@ export default function Inicio() {
     <Screen tabBarSpace>
       {/* topo */}
       <View style={styles.top}>
-        <Pressable onPress={() => router.push('/perfil')} style={styles.avatar} accessibilityLabel="perfil" accessibilityRole="button">
-          <Text variant="bodyStrong" color={colors.primary}>
-            {(name[0] ?? 't').toLowerCase()}
-          </Text>
-        </Pressable>
+        <TourTarget id="home-perfil">
+          <Pressable onPress={() => router.push('/perfil')} style={styles.avatar} accessibilityLabel="perfil" accessibilityRole="button">
+            <Text variant="bodyStrong" color={colors.primary}>
+              {(name[0] ?? 't').toLowerCase()}
+            </Text>
+          </Pressable>
+        </TourTarget>
         <View style={{ flex: 1 }}>
           <Text variant="heading">
             {greeting()}
@@ -153,6 +156,7 @@ export default function Inicio() {
       ) : null}
 
       {/* saldo */}
+      <TourTarget id="home-saldo">
       <FadeIn>
         <Card style={styles.balanceCard} onPress={data.accounts.length ? () => router.push('/contas') : undefined}>
           <Text variant="smallStrong" color={colors.textSoft}>
@@ -198,8 +202,10 @@ export default function Inicio() {
           ) : null}
         </Card>
       </FadeIn>
+      </TourTarget>
 
       {/* quanto dá pra gastar hoje */}
+      <TourTarget id="home-dia">
       <FadeIn delay={60}>
         <Card tone="cream" onPress={() => router.navigate('/horizonte')} style={styles.allowance}>
           <View style={{ flex: 1, gap: 6 }}>
@@ -233,6 +239,7 @@ export default function Inicio() {
           <Icon as={ChevronRight} color={colors.primary} />
         </Card>
       </FadeIn>
+      </TourTarget>
 
       {/* resumo em uma frase */}
       <FadeIn delay={100}>
@@ -336,6 +343,7 @@ export default function Inicio() {
         </Section>
       ) : null}
 
+      <TourTarget id="home-gastos">
       <Section title="gastos por categoria" actionLabel={spendingRows.length ? 'ver tudo' : undefined} onAction={() => router.push('/planejamento')}>
         {spendingRows.length ? (
           <Card style={{ gap: space.lg }} onPress={() => router.push('/planejamento')}>
@@ -373,6 +381,7 @@ export default function Inicio() {
           </Card>
         )}
       </Section>
+      </TourTarget>
 
       <Section title="últimas movimentações" actionLabel={view.recent.length ? 'ver extrato' : undefined} onAction={() => router.navigate('/extrato')}>
         {view.recent.length ? (

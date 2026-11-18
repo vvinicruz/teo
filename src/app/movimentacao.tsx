@@ -18,6 +18,7 @@ import {
   Sheet,
   Text,
   TextField,
+  TourTarget,
   useFeedback,
 } from '../components';
 import { useData } from '../data/DataProvider';
@@ -281,9 +282,14 @@ export default function Movimentacao() {
     <Screen
       title={title}
       right={<IconButton icon={X} label="fechar" onPress={close} background={colors.surface} />}
-      footer={<Button label={existing ? 'salvar alterações' : fromPrediction ? (isIncome ? 'confirmar recebimento' : 'confirmar pagamento') : 'salvar'} onPress={save} loading={saving} />}
+      footer={
+        <TourTarget id="mov-salvar">
+          <Button label={existing ? 'salvar alterações' : fromPrediction ? (isIncome ? 'confirmar recebimento' : 'confirmar pagamento') : 'salvar'} onPress={save} loading={saving} />
+        </TourTarget>
+      }
     >
       {!existing && !fromPrediction ? (
+        <TourTarget id="mov-tipo">
         <Segmented<Kind>
           value={kind}
           onChange={(k) => {
@@ -295,6 +301,7 @@ export default function Movimentacao() {
             { value: 'receita', label: 'receita', color: colors.income },
           ]}
         />
+        </TourTarget>
       ) : null}
 
       {!existing && !fromPrediction ? (
@@ -355,7 +362,9 @@ export default function Movimentacao() {
       ) : null}
 
       <View style={{ marginVertical: space.xl }}>
-        <AmountInput value={amount} onChange={setAmount} color={accent} autoFocus={!existing && !fromPrediction} />
+        <TourTarget id="mov-valor">
+          <AmountInput value={amount} onChange={setAmount} color={accent} autoFocus={!existing && !fromPrediction} />
+        </TourTarget>
         {error ? (
           <Text variant="small" color={colors.danger} center>
             {error}
@@ -364,14 +373,16 @@ export default function Movimentacao() {
       </View>
 
       <View style={{ gap: space.xl }}>
-        <TextField
-          label="descrição"
-          value={description}
-          onChangeText={setDescription}
-          placeholder={isIncome ? 'ex.: freela, salário' : 'ex.: mercado, uber, café'}
-          maxLength={80}
-          returnKeyType="done"
-        />
+        <TourTarget id="mov-descricao">
+          <TextField
+            label="descrição"
+            value={description}
+            onChangeText={setDescription}
+            placeholder={isIncome ? 'ex.: freela, salário' : 'ex.: mercado, uber, café'}
+            maxLength={80}
+            returnKeyType="done"
+          />
+        </TourTarget>
 
         <TextField
           label="observação (opcional)"
@@ -384,7 +395,7 @@ export default function Movimentacao() {
         />
 
         {!isSpecial ? (
-          <View style={styles.block}>
+          <TourTarget id="mov-onde" style={styles.block}>
             <Text variant="smallStrong" color={colors.textSoft}>
               {isIncome ? 'onde entrou?' : 'onde foi?'}
             </Text>
@@ -404,16 +415,16 @@ export default function Movimentacao() {
                   : `não sai do saldo agora: entra na fatura do ${card.name} que vence em ${shortDate(invoiceOf(card, date).dueDate)}.`}
               </Text>
             ) : null}
-          </View>
+          </TourTarget>
         ) : null}
 
         {!isSpecial ? (
-          <View style={styles.block}>
+          <TourTarget id="mov-categoria" style={styles.block}>
             <Text variant="smallStrong" color={colors.textSoft}>
               categoria
             </Text>
             <CategoryPicker categories={categories} value={categoryId} onChange={setCategoryId} income={isIncome} />
-          </View>
+          </TourTarget>
         ) : null}
 
         <View style={styles.block}>

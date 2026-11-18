@@ -138,13 +138,14 @@ export const HELP_TOPICS: HelpTopic[] = [
   {
     id: 'planejamento',
     icon: 'lazer',
-    title: 'planejamento do mês',
-    summary: 'quanto você quer gastar em cada categoria.',
+    title: 'gastos por categoria',
+    summary: 'pra onde vai o dinheiro, limites e comparação com os meses anteriores.',
     paragraphs: [
-      'defina um valor por categoria (ex.: R$ 600 no mercado). o teo acompanha quanto já foi e mostra se está tranquilo, quase no limite ou se passou.',
-      'o valor planejado também entra no horizonte como "gasto planejado", pra previsão ficar mais perto da realidade.',
+      'veja quanto saiu em cada categoria no mês, na conta e no cartão. toque numa categoria para ver cada gasto com a data, comparar com o mês passado e acompanhar a evolução mês a mês.',
+      'se quiser, defina um limite por categoria (ex.: R$ 600 no mercado). o teo mostra quanto ainda dá pra gastar, avisa quando está perto do limite e comemora quando você gasta menos. o limite também entra no horizonte como "gasto planejado".',
+      'dá para baixar um relatório em pdf com tudo organizado por categoria.',
     ],
-    action: { label: 'planejar o mês', href: '/planejamento' },
+    action: { label: 'ver meus gastos', href: '/planejamento' },
   },
   {
     id: 'metas',

@@ -12,6 +12,7 @@ import {
   ProgressBar,
   Screen,
   Text,
+  TourTarget,
 } from '../components';
 import { useData } from '../data/DataProvider';
 import { shortDate } from '../domain/dates';
@@ -42,13 +43,18 @@ export default function Cartoes() {
     <Screen
       back
       title="cartões de crédito"
-      right={<IconButton icon={Plus} label="novo cartão" onPress={() => router.push('/cartao-form')} background={colors.cream} color={colors.primary} />}
+      right={
+        <TourTarget id="cartoes-novo">
+          <IconButton icon={Plus} label="novo cartão" onPress={() => router.push('/cartao-form')} background={colors.cream} color={colors.primary} />
+        </TourTarget>
+      }
     >
       <Text color={colors.textSoft} style={{ marginTop: space.md }}>
         compras no cartão não saem do seu saldo na hora: elas vão para a fatura, que aparece no horizonte no dia do
         vencimento.
       </Text>
 
+      <TourTarget id="cartoes-lista">
       {cards.length === 0 ? (
         <EmptyState
           title="nenhum cartão por aqui"
@@ -92,6 +98,7 @@ export default function Cartoes() {
           ))}
         </View>
       )}
+      </TourTarget>
     </Screen>
   );
 }

@@ -9,7 +9,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Button, FeedbackProvider, GoalCelebration, Logo, Text, UpdateBanner } from '../components';
+import { Button, FeedbackProvider, GoalCelebration, Logo, Text, TourProvider, UpdateBanner } from '../components';
 import { AuthProvider, useAuth } from '../data/AuthProvider';
 import { DataProvider, useData } from '../data/DataProvider';
 import { colors, space } from '../theme';
@@ -36,7 +36,9 @@ export default function RootLayout() {
       <AuthProvider>
         <DataProvider>
           <FeedbackProvider>
-            <Gate />
+            <TourProvider>
+              <Gate />
+            </TourProvider>
           </FeedbackProvider>
         </DataProvider>
       </AuthProvider>

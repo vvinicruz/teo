@@ -17,6 +17,7 @@ import {
   Screen,
   Sheet,
   Text,
+  TourTarget,
 } from '../../components';
 import { useData } from '../../data/DataProvider';
 import { addMonths, friendlyDate, monthName, monthOf, weekday } from '../../domain/dates';
@@ -92,7 +93,9 @@ export default function Extrato() {
     <Screen tabBarSpace>
       <View style={styles.titleRow}>
         <Text variant="title">extrato</Text>
-        <Button label="importar" icon={FileUp} variant="secondary" small onPress={() => router.push('/importar')} />
+        <TourTarget id="ext-importar">
+          <Button label="importar" icon={FileUp} variant="secondary" small onPress={() => router.push('/importar')} />
+        </TourTarget>
       </View>
 
       <View style={styles.searchRow}>

@@ -22,6 +22,8 @@ export const colors = {
   danger: '#D93A2B',
   dangerSoft: '#FDECEA',
   overlay: 'rgba(26, 26, 26, 0.35)',
+  /** fundo escuro do passo a passo (deixa só o destaque aceso). */
+  scrim: 'rgba(26, 26, 26, 0.62)',
   white: '#FFFFFF',
 } as const;
 

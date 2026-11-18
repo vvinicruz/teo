@@ -10,7 +10,6 @@ import {
   CategoryPicker,
   Chip,
   DestinationPicker,
-  type Destination,
   Icon,
   IconButton,
   Mascot,
@@ -20,6 +19,8 @@ import {
   Sheet,
   Text,
   TextField,
+  TourTarget,
+  type Destination,
   useFeedback,
 } from '../components';
 import { useData } from '../data/DataProvider';
@@ -222,7 +223,9 @@ export default function Importar() {
         <Text variant="smallStrong" color={colors.textSoft}>
           de onde é esse extrato?
         </Text>
-        <DestinationPicker value={dest} onChange={changeDestination} />
+        <TourTarget id="imp-destino">
+          <DestinationPicker value={dest} onChange={changeDestination} />
+        </TourTarget>
         {statement && statement.looksLikeCard && !cardId ? (
           <Text variant="small" color={colors.attention}>
             esse arquivo parece ser de cartão de crédito. se for, escolha o cartão acima.
@@ -232,7 +235,9 @@ export default function Importar() {
 
       {!statement ? (
         <View style={styles.block}>
-          <Button label="escolher arquivo" icon={FileUp} onPress={pick} loading={reading} />
+          <TourTarget id="imp-arquivo">
+            <Button label="escolher arquivo" icon={FileUp} onPress={pick} loading={reading} />
+          </TourTarget>
           {error ? (
             <Text variant="small" color={colors.danger}>
               {error}

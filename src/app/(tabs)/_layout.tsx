@@ -3,7 +3,7 @@ import { Tabs, type BottomTabBarProps } from 'expo-router/js-tabs';
 import { CalendarDays, House, Plus, ReceiptText, Target, type LucideIcon } from 'lucide-react-native';
 import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Icon, Pressable, Text } from '../../components';
+import { Icon, Pressable, Text, TourTarget } from '../../components';
 import { colors, MAX_WIDTH, radius, shadow, space } from '../../theme';
 
 const TABS: Record<string, { label: string; icon: LucideIcon }> = {
@@ -57,6 +57,7 @@ function TabBar({ state, navigateToTab }: BottomTabBarProps) {
 
   const add = (
     <View key="add" style={styles.tab}>
+      <TourTarget id="tab-add" style={{ marginTop: -22, borderRadius: radius.pill }}>
       <Pressable
         onPress={() => router.push('/movimentacao')}
         accessibilityRole="button"
@@ -66,6 +67,7 @@ function TabBar({ state, navigateToTab }: BottomTabBarProps) {
       >
         <Icon as={Plus} size={28} color={colors.white} strokeWidth={2.4} />
       </Pressable>
+      </TourTarget>
     </View>
   );
 
@@ -103,7 +105,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: -22,
     ...shadow.float,
   },
 });

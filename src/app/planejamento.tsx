@@ -13,6 +13,7 @@ import {
   ProgressBar,
   Screen,
   Text,
+  TourTarget,
   useFeedback,
 } from '../components';
 import { useData } from '../data/DataProvider';
@@ -78,6 +79,7 @@ export default function GastosPorCategoria() {
         <IconButton icon={ChevronRight} label="próximo mês" onPress={() => setMonth(addMonths(month, 1))} />
       </View>
 
+      <TourTarget id="gastos-resumo">
       <Card tone="cream" style={{ gap: space.sm }}>
         <Text variant="small" color={colors.textSoft}>
           {isPast ? 'você gastou' : 'até agora você gastou'}
@@ -101,25 +103,22 @@ export default function GastosPorCategoria() {
           </Text>
         ) : null}
       </Card>
+      </TourTarget>
 
-      <Button
-        label="baixar relatório em pdf"
-        icon={FileDown}
-        variant="secondary"
-        onPress={exportPdf}
-        style={{ marginTop: space.md }}
-      />
+      <TourTarget id="gastos-pdf" style={{ marginTop: space.md }}>
+        <Button label="baixar relatório em pdf" icon={FileDown} variant="secondary" onPress={exportPdf} />
+      </TourTarget>
 
       {report.withLimit.length ? (
-        <View style={styles.section}>
+        <TourTarget id="gastos-lista" style={styles.section}>
           <Text variant="heading">com limite</Text>
           {report.withLimit.map((r) => (
             <LimitCard key={r.categoryId} row={r} category={get(r.categoryId)} money={money} isPast={isPast} onPress={() => open(r.categoryId)} />
           ))}
-        </View>
+        </TourTarget>
       ) : null}
 
-      <View style={styles.section}>
+      <TourTarget id={report.withLimit.length ? 'gastos-lista-2' : 'gastos-lista'} style={styles.section}>
         <Text variant="heading">{report.withLimit.length ? 'sem limite' : 'por categoria'}</Text>
         <Text variant="small" color={colors.textFaint}>
           {report.withLimit.length
@@ -157,7 +156,7 @@ export default function GastosPorCategoria() {
             );
           })}
         </Card>
-      </View>
+      </TourTarget>
 
     </Screen>
   );

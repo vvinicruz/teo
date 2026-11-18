@@ -13,6 +13,7 @@ import {
   Pressable,
   Sheet,
   Text,
+  TourTarget,
 } from '../../components';
 import { useData } from '../../data/DataProvider';
 import { addMonths, monthName, monthOf, parseISODate, weekday } from '../../domain/dates';
@@ -60,6 +61,7 @@ export default function Horizonte() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
         <View style={styles.inner}>
+          <TourTarget id="hz-resumo">
           <FadeIn key={month}>
             <Card style={{ gap: space.lg }}>
               <View style={styles.flow}>
@@ -118,6 +120,7 @@ export default function Horizonte() {
               </Text>
             </Pressable>
           </FadeIn>
+          </TourTarget>
 
           {pastDays.length > 0 ? (
             <Pressable onPress={() => setPastOpenFor(showPast ? null : month)} style={styles.pastToggle} accessibilityRole="button">
@@ -130,6 +133,7 @@ export default function Horizonte() {
             </Pressable>
           ) : null}
 
+          <TourTarget id="hz-dias">
           <View style={styles.timeline}>
             {visibleDays.map((d, i) => (
               <DayRow
@@ -141,6 +145,7 @@ export default function Horizonte() {
               />
             ))}
           </View>
+          </TourTarget>
         </View>
       </ScrollView>
 
