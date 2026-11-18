@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Button, Card, FadeIn, Logo, Pressable, Screen, Segmented, Text, TextField, useFeedback } from '../components';
 import { useAuth } from '../data/AuthProvider';
 import { describeAuthError, validateEmail, type AuthField } from '../domain/auth';
