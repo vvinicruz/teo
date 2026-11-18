@@ -221,3 +221,31 @@ describe('mesmo nome e centavos de diferença', () => {
     expect(centsApart(15518, 16000)).toBe(false);
   });
 });
+
+describe('a mesma parcela em outra data', () => {
+  const card = { id: 'itau', name: 'itaú', closingDay: 14, dueDay: 21, creditLimit: null, createdAt: '' };
+  const snap = (transactions: Snapshot['transactions']): Snapshot => ({
+    settings: { name: '', initialBalance: 0, initialBalanceDate: '2026-09-01', reserve: 0, hideValues: false, onboarded: true },
+    categories: [], transactions, recurrences: [], budgets: [], goals: [], investments: [], accounts: [], cards: [card],
+  });
+  const novembro = (valor: string, parcela: string) => [
+    ['Fatura Fechada - Novembro/2026'], ['Cartão', 'Valor', 'Vencimento'], ['Itau', '100', '46349'],
+    ['Data', 'Lançamento', 'Parcelamento', 'Valor'], ['46335', 'Jim.com Juliane Martins Lamericanabr', parcela, valor],
+  ];
+  // caso real: dezembro importado antes, com "todas"; a parcela 1 ficou em 15/10 (versão antiga do teo)
+  const criada = {
+    id: 'p1', kind: 'despesa' as const, amount: 15517, description: 'jim.com juliane martins lamericanabr 1/2', categoryId: null,
+    date: '2026-10-15', status: 'realizada' as const, paymentMethod: 'credito' as const, cardId: 'itau', recurrenceId: 'r1',
+    occurrenceDate: '2026-10-15', createdAt: '',
+  };
+
+  it('"1/2" de r$ 155,17 em 15/10 e "01/02" de r$ 155,18 em 09/11 são a mesma parcela', () => {
+    const rows = buildImportRows(snap([criada]), parseSpreadsheet(novembro('155.18', 'Parcela 1 de 2')), { cardId: 'itau', accountId: null }, '2026-11-20');
+    expect(rows[0]).toMatchObject({ decision: 'pular', autoMatched: true, suggestion: { type: 'parecida', transaction: { id: 'p1' } } });
+  });
+
+  it('outra parcela da mesma compra não é confundida', () => {
+    const rows = buildImportRows(snap([criada]), parseSpreadsheet(novembro('155.18', 'Parcela 2 de 2')), { cardId: 'itau', accountId: null }, '2026-11-20');
+    expect(rows[0].suggestion?.type).not.toBe('parecida');
+  });
+});

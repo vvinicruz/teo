@@ -866,6 +866,18 @@ export function buildImportRows(
     // mesmo nome (ou quase) e diferença de centavos: o teo responde sozinho, sem perguntar.
     const sure = (description: string, value: Cents) =>
       centsApart(value, amount) && nameSimilarity(description, line.description) >= SAME_NAME;
+    // parcela: "loja 01/02" e "loja 1/2" são a mesma parcela, ainda que registradas em datas diferentes
+    const lineParcel = detectInstallment(line.description);
+    const sameInstallment = (description: string, value: Cents, date: ISODate) => {
+      const other = lineParcel ? detectInstallment(description) : null;
+      return (
+        !!other &&
+        other.n === lineParcel!.n &&
+        other.total === lineParcel!.total &&
+        near(date, line.date, 45) &&
+        sure(description, value)
+      );
+    };
 
     const exactTwin = exact.get(i);
     if (exactTwin) {
@@ -888,7 +900,9 @@ export function buildImportRows(
           // centavos de diferença e nome ao menos meio parecido: pergunta (ou decide, se for o mesmo nome)
           (near(t.date, line.date, 2) &&
             centsApart(t.amount, amount) &&
-            (similarText(t.description, line.description) || nameSimilarity(t.description, line.description) >= 0.5))),
+            (similarText(t.description, line.description) || nameSimilarity(t.description, line.description) >= 0.5)) ||
+          // a mesma parcela (mesmo nome, mesmo número, centavos de diferença), mesmo com outra data
+          sameInstallment(t.description, t.amount, t.date)),
     );
     if (twin) {
       used.add(twin.id);

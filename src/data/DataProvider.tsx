@@ -309,8 +309,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
           if (row.decision === 'pular' && row.suggestion?.type === 'parecida') {
             const original = row.suggestion.transaction;
             let t = original;
-            // o teo reconheceu sozinho (centavos de diferença): vale o valor do banco.
-            if (row.autoMatched && t.amount !== row.amount) t = { ...t, amount: row.amount };
+            // o teo reconheceu sozinho (centavos de diferença, ou a mesma parcela em outra data): vale o que o banco diz.
+            if (row.autoMatched && (t.amount !== row.amount || t.date !== row.date)) t = { ...t, amount: row.amount, date: row.date };
             if (cardId) {
               if (t.cardId !== cardId || row.invoiceDate) {
                 t = { ...t, cardId, accountId: null, status: 'realizada', paymentMethod: 'credito', invoiceDate: row.invoiceDate ?? t.invoiceDate ?? null };
@@ -404,7 +404,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
                     ...tx,
                     id: newId(),
                     date: occ.date,
-                    description: fitDescription(`${rec.description} ${occ.index}/${inst.total}`),
+                    description: fitDescription(
+                      `${rec.description} ${String(occ.index).padStart(2, '0')}/${String(inst.total).padStart(2, '0')}`,
+                    ),
                     externalId: null,
                     note: null,
                     recurrenceId: rec.id,
