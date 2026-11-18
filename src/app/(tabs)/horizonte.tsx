@@ -17,10 +17,11 @@ import {
 } from '../../components';
 import { useData } from '../../data/DataProvider';
 import { addMonths, monthName, monthOf, parseISODate, weekday } from '../../domain/dates';
-import { dailyAllowance, horizon, type Entry, type HorizonDay } from '../../domain/finance';
+import { balanceTone, dailyAllowance, horizon, type Entry, type HorizonDay } from '../../domain/finance';
 import { formatMoney } from '../../domain/money';
 import { useCategories } from '../../hooks/useCategories';
 import { useToday } from '../../hooks/useToday';
+import { BALANCE_COLOR, BALANCE_SOFT } from '../../lib/balanceTone';
 import { openEntry } from '../../lib/navigation';
 import { colors, MAX_WIDTH, radius, space } from '../../theme';
 
@@ -37,6 +38,7 @@ export default function Horizonte() {
 
   const h = useMemo(() => horizon(data, month, todayDate), [data, month, todayDate]);
   const allowance = useMemo(() => dailyAllowance(data, todayDate), [data, todayDate]);
+  const reserve = data.settings.reserve;
   const hide = data.settings.hideValues;
   const isCurrent = month === thisMonth;
 
@@ -69,14 +71,18 @@ export default function Horizonte() {
                   <Text variant="caption" color={colors.textSoft}>
                     {h.isPastMonth ? 'início do mês' : isCurrent ? 'hoje' : 'início do mês (previsto)'}
                   </Text>
-                  <Money value={h.isPastMonth || !isCurrent ? h.startBalance : h.currentBalance} variant="heading" />
+                  <Money
+                    value={h.isPastMonth || !isCurrent ? h.startBalance : h.currentBalance}
+                    variant="heading"
+                    color={BALANCE_COLOR[balanceTone(h.isPastMonth || !isCurrent ? h.startBalance : h.currentBalance, reserve)]}
+                  />
                 </View>
                 <Icon as={ArrowRight} color={colors.textFaint} size={20} />
                 <View style={{ flex: 1, alignItems: 'flex-end' }}>
                   <Text variant="caption" color={colors.textSoft}>
                     {h.isPastMonth ? 'fim do mês' : 'fim do mês (previsto)'}
                   </Text>
-                  <Money value={h.projectedEnd} variant="heading" color={h.projectedEnd < 0 ? colors.danger : colors.primary} />
+                  <Money value={h.projectedEnd} variant="heading" color={BALANCE_COLOR[balanceTone(h.projectedEnd, reserve)]} />
                 </View>
               </View>
 
@@ -140,6 +146,7 @@ export default function Horizonte() {
                 key={d.date}
                 day={d}
                 beforeStart={d.date < data.settings.initialBalanceDate}
+                reserve={reserve}
                 first={i === 0}
                 last={i === visibleDays.length - 1}
               />
@@ -185,8 +192,11 @@ function DayRow({
   first,
   last,
   beforeStart,
+  reserve,
 }: {
   day: HorizonDay;
+  /** valor que a pessoa quer manter guardado: abaixo dele, o saldo fica amarelo. */
+  reserve: number;
   first: boolean;
   last: boolean;
   /** dia anterior ao início do uso do teo: não temos como saber o saldo real. */
@@ -195,6 +205,8 @@ function DayRow({
   const { day: n } = parseISODate(day.date);
   const negative = day.endBalance < 0;
   const empty = day.entries.length === 0 && day.plannedSpending === 0;
+  const tone = balanceTone(day.endBalance, reserve);
+  const soft = beforeStart && empty ? null : BALANCE_SOFT[tone];
   const dotStyle = day.isToday ? styles.dotToday : day.isPast ? styles.dotPast : styles.dotFuture;
 
   return (
@@ -221,7 +233,14 @@ function DayRow({
       </View>
 
       {/* conteúdo */}
-      <View style={[styles.dayBody, empty && styles.dayBodyEmpty, day.isToday && styles.dayBodyToday]}>
+      <View
+        style={[
+          styles.dayBody,
+          empty && styles.dayBodyEmpty,
+          day.isToday && styles.dayBodyToday,
+          soft ? { backgroundColor: soft, borderColor: soft } : null,
+        ]}
+      >
         {day.entries.map((e) => (
           <DayEntry key={e.key} entry={e} />
         ))}
@@ -241,7 +260,7 @@ function DayRow({
             <Money
               value={day.endBalance}
               variant={empty ? 'small' : 'smallStrong'}
-              color={negative ? colors.danger : empty ? colors.textSoft : colors.text}
+              color={BALANCE_COLOR[tone]}
             />
           )}
         </View>

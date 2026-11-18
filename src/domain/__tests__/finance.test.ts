@@ -275,3 +275,14 @@ describe('resumo do mês', () => {
     expect(m).toMatchObject({ income: 30000, expense: 1000, pendingIncome: 0, pendingExpense: 50000 });
   });
 });
+
+describe('cor do saldo no horizonte', () => {
+  it('verde quando positivo, amarelo abaixo da reserva, vermelho quando negativo', async () => {
+    const { balanceTone } = await import('../finance');
+    expect(balanceTone(150000, 0)).toBe('positivo');
+    expect(balanceTone(150000, 100000)).toBe('positivo');
+    expect(balanceTone(50000, 100000)).toBe('reserva');
+    expect(balanceTone(-1, 100000)).toBe('negativo');
+    expect(balanceTone(0, 0)).toBe('zero');
+  });
+});

@@ -527,6 +527,17 @@ export function monthSummary(s: Snapshot, month: MonthKey, todayDate: ISODate): 
   };
 }
 
+// ---------- cor do saldo ----------
+
+/** como mostrar um saldo: positivo (verde), abaixo da reserva (amarelo) ou negativo (vermelho). */
+export type BalanceTone = 'positivo' | 'reserva' | 'negativo' | 'zero';
+
+export function balanceTone(balance: Cents, reserve: Cents): BalanceTone {
+  if (balance < 0) return 'negativo';
+  if (balance === 0) return 'zero';
+  return reserve > 0 && balance < reserve ? 'reserva' : 'positivo';
+}
+
 // ---------- planejamento ----------
 
 export type BudgetStatus = 'tranquilo' | 'atencao' | 'passou';
