@@ -635,6 +635,8 @@ export interface ImportRow {
   installmentChoice: InstallmentChoice;
   /** cartão: fatura (vencimento) em que a compra entrou, se for diferente da que a data indica. */
   invoiceDate: ISODate | null;
+  /** o teo teve certeza (mesmo nome e diferença de centavos) e já respondeu a pergunta sozinho. */
+  autoMatched?: boolean;
 }
 
 export type InstallmentChoice = 'so-esta' | 'proximas' | 'todas';
@@ -671,6 +673,37 @@ function similarText(a: string, b: string): boolean {
 
 /** valores "parecidos": iguais, ou até 15% de diferença (conta de luz que variou). */
 const similarAmount = (a: Cents, b: Cents) => a === b || Math.abs(a - b) <= Math.max(a, b) * 0.15;
+
+/** diferença de centavos (arredondamento de parcelas): até 10 centavos ou 0,5% do valor. */
+export const centsApart = (a: Cents, b: Cents) => Math.abs(a - b) <= Math.max(10, Math.round(Math.max(a, b) * 0.005));
+
+/**
+ * quão parecidos são dois nomes, de 0 a 1. ignora maiúsculas, acentos, espaços, pontuação e o número
+ * da parcela ("jim.com juliane 01/02" e "Jim.com Juliane 02/02" = 1).
+ */
+export function nameSimilarity(a: string, b: string): number {
+  const clean = (x: string) => compactKey(detectInstallment(x)?.base ?? x);
+  const x = clean(a);
+  const y = clean(b);
+  if (!x || !y) return 0;
+  if (x === y) return 1;
+  // o banco costuma grudar a cidade no nome ("99food" → "99food99foodsaopaulobr")
+  const [short, long] = x.length <= y.length ? [x, y] : [y, x];
+  if (short.length >= 5 && long.startsWith(short)) return 0.9;
+  const pairs = (t: string) => {
+    const m = new Map<string, number>();
+    for (let i = 0; i < t.length - 1; i++) m.set(t.slice(i, i + 2), (m.get(t.slice(i, i + 2)) ?? 0) + 1);
+    return m;
+  };
+  const px = pairs(x);
+  const py = pairs(y);
+  let common = 0;
+  for (const [k, n] of px) common += Math.min(n, py.get(k) ?? 0);
+  return (2 * common) / (x.length - 1 + y.length - 1);
+}
+
+/** a partir daqui, os nomes são "praticamente o mesmo". */
+const SAME_NAME = 0.8;
 
 /**
  * monta as linhas da prévia, com categoria sugerida e as perguntas sobre duplicidade.
@@ -781,21 +814,42 @@ export function buildImportRows(
       }
     }
 
+    // mesmo nome (ou quase) e diferença de centavos: o teo responde sozinho, sem perguntar.
+    const sure = (description: string, value: Cents) =>
+      centsApart(value, amount) && nameSimilarity(description, line.description) >= SAME_NAME;
+
     const exactTwin = exact.get(i);
     if (exactTwin) {
-      return { ...row, suggestion: { type: 'parecida', transaction: exactTwin, sameDay: true }, decision: null };
+      const auto = sure(exactTwin.description, exactTwin.amount);
+      return {
+        ...row,
+        suggestion: { type: 'parecida', transaction: exactTwin, sameDay: true },
+        decision: auto ? 'pular' : null,
+        autoMatched: auto,
+      };
     }
-    // 2ª chance: mesmo valor registrado em outro dia (1 dia de diferença, ou 2 se o nome for parecido).
+    // 2ª chance: mesmo valor registrado em outro dia (1 dia de diferença, ou 2 se o nome for parecido),
+    // ou o mesmo nome com diferença de centavos.
     const twin = sameDestination.find(
       (t) =>
         !used.has(t.id) &&
         t.kind === kind &&
-        t.amount === amount &&
-        (near(t.date, line.date, 1) || (near(t.date, line.date, 2) && similarText(t.description, line.description))),
+        ((t.amount === amount &&
+          (near(t.date, line.date, 1) || (near(t.date, line.date, 2) && similarText(t.description, line.description)))) ||
+          // centavos de diferença e nome ao menos meio parecido: pergunta (ou decide, se for o mesmo nome)
+          (near(t.date, line.date, 2) &&
+            centsApart(t.amount, amount) &&
+            (similarText(t.description, line.description) || nameSimilarity(t.description, line.description) >= 0.5))),
     );
     if (twin) {
       used.add(twin.id);
-      return { ...row, suggestion: { type: 'parecida', transaction: twin, sameDay: false }, decision: null };
+      const auto = sure(twin.description, twin.amount);
+      return {
+        ...row,
+        suggestion: { type: 'parecida', transaction: twin, sameDay: twin.date === line.date },
+        decision: auto ? 'pular' : null,
+        autoMatched: auto,
+      };
     }
 
     const predicted = predictions
@@ -803,17 +857,27 @@ export function buildImportRows(
       .filter(
         (e) =>
           (near(e.originalDate, line.date, 7) && similarAmount(e.amount, amount)) ||
-          // fatura: parcela prevista para qualquer dia do período dessa fatura, com o mesmo valor.
-          (!!period && e.amount === amount && e.originalDate >= period.start && e.originalDate <= period.end),
+          // fatura: parcela prevista para qualquer dia do período dessa fatura, com o mesmo valor
+          // (ou centavos de diferença e o mesmo nome).
+          (!!period &&
+            (e.amount === amount || sure(e.description, e.amount)) &&
+            e.originalDate >= period.start &&
+            e.originalDate <= period.end),
       )
-      .sort((a, b) => Math.abs(a.amount - amount) - Math.abs(b.amount - amount))[0];
+      .sort(
+        (a, b) =>
+          Number(sure(b.description, b.amount)) - Number(sure(a.description, a.amount)) ||
+          Math.abs(a.amount - amount) - Math.abs(b.amount - amount),
+      )[0];
     if (predicted) {
       used.add(predicted.key);
+      const auto = sure(predicted.description, predicted.amount);
       return {
         ...row,
         categoryId: predicted.categoryId ?? row.categoryId,
         suggestion: { type: 'previsao', entry: predicted },
-        decision: null,
+        decision: auto ? 'vincular' : null,
+        autoMatched: auto,
       };
     }
 

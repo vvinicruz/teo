@@ -143,3 +143,81 @@ describe('fatura: datas das compras', () => {
     expect(rows[2].date).toBe('2026-11-12');
   });
 });
+
+describe('mesmo nome e centavos de diferença', () => {
+  const card = { id: 'itau', name: 'itaú', closingDay: 14, dueDay: 21, creditLimit: null, createdAt: '' };
+  const snap = (over: Partial<Snapshot> = {}): Snapshot => ({
+    settings: { name: '', initialBalance: 0, initialBalanceDate: '2026-10-01', reserve: 0, hideValues: false, onboarded: true },
+    categories: [], transactions: [], recurrences: [], budgets: [], goals: [], investments: [], accounts: [], cards: [card],
+    ...over,
+  });
+  const dezembro = (nome: string, valor: string, parcela = 'Parcela 2 de 2') => [
+    ['Fatura Aberta - Dezembro/2026'],
+    ['Cartão', 'Valor', 'Vencimento'],
+    ['Itau', '100', '46377'],
+    ['Data', 'Lançamento', 'Parcelamento', 'Valor'],
+    ['46335', nome, parcela, valor], // compra de 09/11
+  ];
+  // novembro: parcela 1 importada com "todas" → parcela 2 prevista para 09/12, a r$ 155,18
+  const parcelado = {
+    id: 'r1', kind: 'despesa' as const, amount: 15518, description: 'jim.com juliane martins lamericanabr', categoryId: null,
+    paymentMethod: 'credito' as const, dayOfMonth: 9, startMonth: '2026-11', occurrences: 2, skippedDates: [], cardId: 'itau', createdAt: '',
+  };
+
+  it('parcela prevista com 1 centavo de diferença é confirmada sozinha', () => {
+    const rows = buildImportRows(
+      snap({ recurrences: [parcelado] }),
+      parseSpreadsheet(dezembro('Jim.com Juliane Martins Lamericanabr', '155.17')),
+      { cardId: 'itau', accountId: null },
+      '2026-11-20',
+    );
+    expect(rows[0]).toMatchObject({ decision: 'vincular', autoMatched: true, amount: 15517, suggestion: { type: 'previsao' } });
+  });
+
+  it('nome diferente continua perguntando', () => {
+    const rows = buildImportRows(
+      snap({ recurrences: [parcelado] }),
+      parseSpreadsheet(dezembro('Loja Totalmente Outra', '155.17', '')),
+      { cardId: 'itau', accountId: null },
+      '2026-11-20',
+    );
+    expect(rows[0].decision).toBeNull();
+    expect(rows[0].autoMatched).toBeFalsy();
+  });
+
+  it('compra já registrada com nome parecido e centavos de diferença é reconhecida', () => {
+    const manual = {
+      id: 'm1', kind: 'despesa' as const, amount: 4230, description: '99 food', categoryId: null, date: '2026-11-16',
+      status: 'realizada' as const, paymentMethod: 'credito' as const, cardId: 'itau', createdAt: '',
+    };
+    const grid = [
+      ['Fatura Aberta - Dezembro/2026'], ['Cartão', 'Valor', 'Vencimento'], ['Itau', '100', '46377'],
+      ['Data', 'Lançamento', 'Valor'], ['46342', '99food *99foodsao Paulobr', '42.21'],
+    ];
+    const rows = buildImportRows(snap({ transactions: [manual] }), parseSpreadsheet(grid), { cardId: 'itau', accountId: null }, '2026-11-20');
+    // "99 food" x "99food *99foodsao paulobr": o banco grudou a cidade, mas é o mesmo nome
+    expect(rows[0]).toMatchObject({ suggestion: { type: 'parecida' }, decision: 'pular', autoMatched: true });
+  });
+
+  it('nome meio parecido com centavos de diferença: pergunta', () => {
+    const manual = {
+      id: 'm2', kind: 'despesa' as const, amount: 1280, description: 'uber viagem', categoryId: null, date: '2026-11-16',
+      status: 'realizada' as const, paymentMethod: 'credito' as const, cardId: 'itau', createdAt: '',
+    };
+    const grid = [
+      ['Fatura Aberta - Dezembro/2026'], ['Cartão', 'Valor', 'Vencimento'], ['Itau', '100', '46377'],
+      ['Data', 'Lançamento', 'Valor'], ['46342', 'Uber *Trip Help.uber.comsao Paulobr', '12.74'],
+    ];
+    const rows = buildImportRows(snap({ transactions: [manual] }), parseSpreadsheet(grid), { cardId: 'itau', accountId: null }, '2026-11-20');
+    expect(rows[0]).toMatchObject({ suggestion: { type: 'parecida' }, decision: null });
+  });
+
+  it('semelhança de nomes', async () => {
+    const { nameSimilarity, centsApart } = await import('../importer');
+    expect(nameSimilarity('jim.com juliane martins lamericanabr 01/02', 'Jim.com Juliane Martins Lamericanabr 02/02')).toBe(1);
+    expect(nameSimilarity('quiosque da luzamericanabr', 'quiosque da luz americana')).toBeGreaterThan(0.8);
+    expect(nameSimilarity('uber trip', 'posto shell')).toBeLessThan(0.3);
+    expect(centsApart(15518, 15517)).toBe(true);
+    expect(centsApart(15518, 16000)).toBe(false);
+  });
+});

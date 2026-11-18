@@ -307,13 +307,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
           }
           // "é a mesma": o registro passa a ficar onde o extrato diz (cartão ou conta).
           if (row.decision === 'pular' && row.suggestion?.type === 'parecida') {
-            const t = row.suggestion.transaction;
+            const original = row.suggestion.transaction;
+            let t = original;
+            // o teo reconheceu sozinho (centavos de diferença): vale o valor do banco.
+            if (row.autoMatched && t.amount !== row.amount) t = { ...t, amount: row.amount };
             if (cardId) {
-              if (t.cardId !== cardId || row.invoiceDate)
-                items.push({ ...t, cardId, accountId: null, status: 'realizada', paymentMethod: 'credito', invoiceDate: row.invoiceDate ?? t.invoiceDate ?? null });
+              if (t.cardId !== cardId || row.invoiceDate) {
+                t = { ...t, cardId, accountId: null, status: 'realizada', paymentMethod: 'credito', invoiceDate: row.invoiceDate ?? t.invoiceDate ?? null };
+              }
             } else if ((t.accountId ?? null) !== accountId) {
-              items.push({ ...t, accountId });
+              t = { ...t, accountId };
             }
+            if (t !== original) items.push(t);
             continue;
           }
           const sug = row.suggestion;

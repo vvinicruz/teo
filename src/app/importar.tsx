@@ -153,7 +153,10 @@ export default function Importar() {
     return { pending, saving, fixing, skipped: rows.length - pending - saving };
   }, [rows]);
 
-  const questions = rows.filter((r) => r.suggestion && ['parecida', 'previsao', 'fatura'].includes(r.suggestion.type));
+  // o que o teo já resolveu sozinho (mesmo nome, centavos de diferença) não vira pergunta.
+  const questions = rows.filter(
+    (r) => r.suggestion && !r.autoMatched && ['parecida', 'previsao', 'fatura'].includes(r.suggestion.type),
+  );
 
   const save = async () => {
     if (counts.pending > 0 || counts.saving + counts.fixing === 0) return;
