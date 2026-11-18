@@ -21,10 +21,11 @@ import {
   useFeedback,
 } from '../../components';
 import { useAuth } from '../../data/AuthProvider';
+import { spendingByCategory } from '../../domain/spending';
+import { STATUS_COLOR } from '../../lib/limitStatus';
 import { useData } from '../../data/DataProvider';
 import { addDays, addMonths, dayAndMonth, friendlyDate, lastDay, monthOf, shortDate, weekday } from '../../domain/dates';
 import {
-  budgetProgress,
   cardInvoices,
   dailyAllowance,
   invoiceByDueDate,
@@ -57,7 +58,7 @@ export default function Inicio() {
   const { data, updateSettings, confirmEntry } = useData();
   const { mode } = useAuth();
   const { toast } = useFeedback();
-  const { get } = useCategories();
+  const { get, forKind } = useCategories();
   const todayDate = useToday();
   const month = monthOf(todayDate);
 
@@ -70,9 +71,7 @@ export default function Inicio() {
       allowance: dailyAllowance(data, todayDate),
       overdue: upcoming.filter((e) => e.overdue),
       next: upcoming.filter((e) => !e.overdue).slice(0, 4),
-      budgets: budgetProgress(data, month, todayDate)
-        .sort((a, b) => b.ratio - a.ratio)
-        .slice(0, 3),
+      spending: spendingByCategory(data, forKind('despesa'), month, todayDate),
       // fatura em destaque de cada cartão: a próxima que ainda não foi paga.
       cards: data.cards
         .filter((c) => !c.archived)
@@ -88,9 +87,11 @@ export default function Inicio() {
         .sort((a, b) => (a.date === b.date ? b.createdAt.localeCompare(a.createdAt) : a.date < b.date ? 1 : -1))
         .slice(0, 5),
     };
-  }, [data, month, todayDate]);
+  }, [data, forKind, month, todayDate]);
 
   const { h, summary, allowance } = view;
+  // com limite primeiro (as mais perto de estourar), depois as que mais gastaram
+  const spendingRows = [...view.spending.withLimit, ...view.spending.withoutLimit.filter((r) => r.spent > 0)].slice(0, 4);
   const name = data.settings.name;
   const hide = data.settings.hideValues;
 
@@ -334,21 +335,26 @@ export default function Inicio() {
         </Section>
       ) : null}
 
-      <Section title="planejamento do mês" actionLabel={view.budgets.length ? 'ajustar' : undefined} onAction={() => router.push('/planejamento')}>
-        {view.budgets.length ? (
+      <Section title="gastos por categoria" actionLabel={spendingRows.length ? 'ver tudo' : undefined} onAction={() => router.push('/planejamento')}>
+        {spendingRows.length ? (
           <Card style={{ gap: space.lg }} onPress={() => router.push('/planejamento')}>
-            {view.budgets.map((b) => {
-              const cat = get(b.budget.categoryId);
-              const color = b.status === 'passou' ? colors.attention : colors.primary;
+            {spendingRows.map((r) => {
+              const cat = get(r.categoryId);
+              const color = r.status ? STATUS_COLOR[r.status] : colors.primary;
+              const detail = r.limit
+                ? r.status === 'passou'
+                  ? `passou ${formatMoney(r.over)}`
+                  : `ainda dá ${formatMoney(r.available ?? 0)}`
+                : formatMoney(r.spent);
               return (
-                <View key={b.budget.id} style={{ gap: 6 }}>
+                <View key={r.categoryId ?? 'sem'} style={{ gap: 6 }}>
                   <View style={styles.budgetHead}>
-                    <Text variant="bodyStrong">{cat?.name ?? 'categoria'}</Text>
-                    <Text variant="small" color={colors.textSoft}>
-                      {hide ? `${Math.round(b.ratio * 100)}%` : `${formatMoney(b.spent)} de ${formatMoney(b.budget.amount)}`}
+                    <Text variant="bodyStrong">{cat?.name ?? 'sem categoria'}</Text>
+                    <Text variant="small" color={r.status === 'passou' ? colors.danger : colors.textSoft}>
+                      {r.limit ? `${Math.round(r.ratio * 100)}%${hide ? '' : ` · ${detail}`}` : hide ? `${Math.round(r.share * 100)}%` : detail}
                     </Text>
                   </View>
-                  <ProgressBar value={b.ratio} color={color} height={6} />
+                  <ProgressBar value={r.limit ? r.ratio : r.share} color={color} height={6} />
                 </View>
               );
             })}
@@ -357,9 +363,9 @@ export default function Inicio() {
           <Card onPress={() => router.push('/planejamento')} style={styles.planCta}>
             <Icon as={SlidersHorizontal} color={colors.primary} />
             <View style={{ flex: 1 }}>
-              <Text variant="bodyStrong">quanto você quer gastar este mês?</Text>
+              <Text variant="bodyStrong">para onde vai seu dinheiro?</Text>
               <Text variant="small" color={colors.textSoft}>
-                defina um valor por categoria e o teo acompanha com você.
+                veja quanto saiu em cada categoria e, se quiser, defina um limite por mês.
               </Text>
             </View>
             <Icon as={ChevronRight} color={colors.textFaint} />

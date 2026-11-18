@@ -59,11 +59,12 @@ src/
     (tabs)/       início, horizonte, extrato, metas + barra inferior com o "+"
     movimentacao  adicionar / editar / confirmar previsão
     recorrencia(s) contas fixas, salário, parcelas
-    planejamento  limite mensal por categoria
+    planejamento  gastos por categoria: total do mês, limite opcional e relatório em pdf
     meta          criar / editar meta
     perfil, categorias, entrar, boas-vindas
   domain/         regras de negócio puras (sem react) — testadas
     finance.ts    saldo, previsões, horizonte, "dá pra gastar por dia", planejamento
+    spending.ts   gastos do mês por categoria (com e sem limite)
     money.ts      centavos e formatação r$
     dates.ts      datas "aaaa-mm-dd" sem fuso horário
   data/           persistência (local ou supabase, mesma interface) + login
@@ -83,6 +84,9 @@ supabase/         estrutura do banco e regras de segurança
 - o **planejamento** por categoria vira "gasto planejado" diário no horizonte, descontando o que já foi
   gasto ou está previsto na categoria. gastou 120 com 80 planejados? a diferença já está no saldo e o
   planejado restante vira zero.
+- **gastos por categoria** = despesas realizadas no mês (conta e cartão, pela data da compra). não entram
+  pagamento de fatura (a compra já foi contada), caixinhas nem transferências. com limite: % usado,
+  "ainda dá" = limite − gasto − o que ainda está previsto na categoria; 80% ou mais = perto do limite.
 - **dá pra gastar por dia** = (saldo atual + o que vai entrar − o que vai sair − reserva) ÷ dias restantes.
 
 - **cartão de crédito:** compras no cartão não mexem no saldo; entram na fatura (pelo dia de fechamento)

@@ -518,7 +518,7 @@ export interface BudgetProgress {
 }
 
 /** consumo ainda por vir num mês, por categoria (conta e cartão). */
-function upcomingConsumption(s: Snapshot, month: MonthKey, todayDate: ISODate): Entry[] {
+export function upcomingConsumption(s: Snapshot, month: MonthKey, todayDate: ISODate): Entry[] {
   if (month < monthOf(todayDate)) return [];
   const isCurrent = month === monthOf(todayDate);
   const cash = isCurrent

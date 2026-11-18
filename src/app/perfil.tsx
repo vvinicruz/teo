@@ -143,7 +143,7 @@ export default function Perfil() {
         <Item icon={Landmark} label="caixinhas e investimentos" onPress={() => router.push('/guardado')} />
         <Item icon={Receipt} label="imposto de renda" onPress={() => router.push('/imposto')} />
         <Item icon={Repeat} label="contas fixas e recorrências" onPress={() => router.push('/recorrencias')} />
-        <Item icon={SlidersHorizontal} label="planejamento do mês" onPress={() => router.push('/planejamento')} />
+        <Item icon={SlidersHorizontal} label="gastos por categoria" onPress={() => router.push('/planejamento')} />
         <Item icon={Tags} label="categorias" onPress={() => router.push('/categorias')} last />
       </Group>
 
