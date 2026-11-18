@@ -84,3 +84,5 @@ export const shadow = {
 
 /** largura máxima do conteúdo em telas grandes (web/tablet). */
 export const MAX_WIDTH = 560;
+
+export { BANK_STYLES, type BankStyle } from './banks';

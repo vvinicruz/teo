@@ -2,7 +2,17 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Trash2, X } from 'lucide-react-native';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { AmountInput, Button, Chip, IconButton, Screen, Text, TextField, useFeedback } from '../components';
+import {
+  AmountInput,
+  BankBadge,
+  Button,
+  Chip,
+  IconButton,
+  Screen,
+  Text,
+  TextField,
+  useFeedback,
+} from '../components';
 import { useData } from '../data/DataProvider';
 import { BANKS } from '../domain/banks';
 import { colors, space } from '../theme';
@@ -82,6 +92,7 @@ export default function ContaForm() {
               <Chip
                 key={b.code}
                 label={b.name}
+                leading={<BankBadge bankCode={b.code} name={b.name} kind="conta" size={20} />}
                 selected={bankCode === b.code}
                 onPress={() => {
                   setBankCode(b.code);

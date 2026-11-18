@@ -1,9 +1,10 @@
 import { router } from 'expo-router';
-import { ArrowLeftRight, ChevronRight, CreditCard, Landmark, Plus, Wallet } from 'lucide-react-native';
+import { ArrowLeftRight, ChevronRight, Plus } from 'lucide-react-native';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import {
   AmountInput,
+  BankBadge,
   Button,
   Card,
   Chip,
@@ -23,7 +24,7 @@ import { accountBalance, currentBalance } from '../domain/finance';
 import { formatMoney } from '../domain/money';
 import { MAIN_ACCOUNT_NAME } from '../domain/types';
 import { useToday } from '../hooks/useToday';
-import { colors, radius, space } from '../theme';
+import { colors, space } from '../theme';
 
 export default function Contas() {
   const { data, transfer } = useData();
@@ -37,7 +38,10 @@ export default function Contas() {
   const [saving, setSaving] = useState(false);
 
   const accounts = data.accounts.filter((a) => !a.archived);
-  const list: { id: string | null; name: string }[] = [{ id: null, name: MAIN_ACCOUNT_NAME }, ...accounts.map((a) => ({ id: a.id, name: a.name }))];
+  const list: { id: string | null; name: string; bankCode?: string | null }[] = [
+    { id: null, name: MAIN_ACCOUNT_NAME },
+    ...accounts.map((a) => ({ id: a.id, name: a.name, bankCode: a.bankCode })),
+  ];
   const cards = data.cards.filter((c) => !c.archived);
 
   const openTransfer = () => {
@@ -87,9 +91,7 @@ export default function Contas() {
               accessibilityRole="button"
               scaleTo={0.99}
             >
-              <View style={styles.icon}>
-                <Icon as={a.id ? Landmark : Wallet} color={colors.primary} />
-              </View>
+              <BankBadge bankCode={a.bankCode} name={a.name} kind={a.id ? 'conta' : 'principal'} />
               <Text variant="bodyStrong" style={{ flex: 1 }}>
                 {a.name}
               </Text>
@@ -115,9 +117,7 @@ export default function Contas() {
                 accessibilityRole="button"
                 scaleTo={0.99}
               >
-                <View style={styles.icon}>
-                  <Icon as={CreditCard} color={colors.primary} />
-                </View>
+                <BankBadge bankCode={c.bankCode} name={c.name} kind="cartao" />
                 <Text variant="bodyStrong" style={{ flex: 1 }}>
                   {c.name}
                 </Text>
@@ -180,6 +180,5 @@ const styles = StyleSheet.create({
   total: { gap: space.xs, marginTop: space.md },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.lg },
   sep: { borderBottomWidth: 1, borderBottomColor: colors.line },
-  icon: { width: 40, height: 40, borderRadius: radius.pill, backgroundColor: colors.cream, alignItems: 'center', justifyContent: 'center' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
 });

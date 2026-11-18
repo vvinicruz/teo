@@ -2,7 +2,21 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ChevronDown, Trash2, X } from 'lucide-react-native';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { AmountInput, Button, Card, Chip, Icon, IconButton, Pressable, Screen, Sheet, Text, TextField, useFeedback } from '../components';
+import {
+  AmountInput,
+  BankBadge,
+  Button,
+  Card,
+  Chip,
+  Icon,
+  IconButton,
+  Pressable,
+  Screen,
+  Sheet,
+  Text,
+  TextField,
+  useFeedback,
+} from '../components';
 import { BANKS } from '../domain/banks';
 import { formatRate } from '../domain/interest';
 import { useCardRates } from '../hooks/useCardRates';
@@ -204,6 +218,7 @@ export default function CartaoForm() {
             <Chip
               key={b.code}
               label={b.name}
+              leading={<BankBadge bankCode={b.code} name={b.name} kind="cartao" size={20} />}
               selected={bankCode === b.code}
               onPress={() => {
                 setBankCode(b.code);

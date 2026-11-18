@@ -1,5 +1,6 @@
 import { router } from 'expo-router';
 import { CreditCard, Landmark, Plus, Wallet } from 'lucide-react-native';
+import { BankBadge } from './BankBadge';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useData } from '../data/DataProvider';
@@ -48,13 +49,17 @@ export function DestinationPicker({ value, onChange, accountsOnly }: Props) {
         <Chip
           key={a.id}
           label={a.name}
-          icon={Landmark}
+          leading={<BankBadge bankCode={a.bankCode} name={a.name} kind="conta" size={20} />}
           selected={!value.cardId && value.accountId === a.id}
           onPress={() => onChange({ accountId: a.id, cardId: null })}
         />
       ))}
       {cards.map((c) => (
-        <Chip key={c.id} label={c.name} icon={CreditCard} selected={value.cardId === c.id} onPress={() => onChange({ accountId: null, cardId: c.id })} />
+        <Chip
+          key={c.id}
+          label={c.name}
+          leading={<BankBadge bankCode={c.bankCode} name={c.name} kind="cartao" size={20} />}
+          selected={value.cardId === c.id} onPress={() => onChange({ accountId: null, cardId: c.id })} />
       ))}
       <Pressable onPress={() => setAdding(true)} style={styles.add} accessibilityRole="button" accessibilityLabel="adicionar conta ou cartão">
         <Icon as={Plus} size={16} color={colors.primary} />

@@ -1,14 +1,24 @@
 import { router } from 'expo-router';
-import { ChevronRight, CreditCard, Plus } from 'lucide-react-native';
+import { ChevronRight, Plus } from 'lucide-react-native';
 import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Card, EmptyState, Icon, IconButton, Money, ProgressBar, Screen, Text } from '../components';
+import {
+  BankBadge,
+  Card,
+  EmptyState,
+  Icon,
+  IconButton,
+  Money,
+  ProgressBar,
+  Screen,
+  Text,
+} from '../components';
 import { useData } from '../data/DataProvider';
 import { shortDate } from '../domain/dates';
 import { cardLimitUsed, invoiceByDueDate, invoiceOf } from '../domain/finance';
 import { formatMoney } from '../domain/money';
 import { useToday } from '../hooks/useToday';
-import { colors, radius, space } from '../theme';
+import { colors, space } from '../theme';
 
 const STATUS = { aberta: 'aberta', fechada: 'fechada · aguardando pagamento', paga: 'paga', parcial: 'paga em parte' } as const;
 
@@ -51,9 +61,7 @@ export default function Cartoes() {
           {cards.map(({ card, invoice, used }) => (
             <Card key={card.id} onPress={() => router.push({ pathname: '/cartao', params: { id: card.id } })} style={{ gap: space.md }}>
               <View style={styles.head}>
-                <View style={styles.icon}>
-                  <Icon as={CreditCard} color={colors.primary} />
-                </View>
+                <BankBadge bankCode={card.bankCode} name={card.name} kind="cartao" size={44} />
                 <View style={{ flex: 1 }}>
                   <Text variant="bodyStrong">{card.name}</Text>
                   <Text variant="small" color={colors.textSoft}>
@@ -90,6 +98,5 @@ export default function Cartoes() {
 
 const styles = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  icon: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: colors.cream, alignItems: 'center', justifyContent: 'center' },
   invoice: { flexDirection: 'row', alignItems: 'flex-end', paddingTop: space.md, borderTopWidth: 1, borderTopColor: colors.line },
 });

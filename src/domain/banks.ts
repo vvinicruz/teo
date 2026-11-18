@@ -32,3 +32,39 @@ export const BANKS: Bank[] = [
   { code: '08357240', name: 'carrefour' },
   { code: '02206577', name: 'magalu' },
 ];
+
+const GUESSES: [RegExp, string][] = [
+  [/\bnu\b|nubank|nu ?conta/, '30680829'],
+  [/itau|personnalite|uniclass/, '60872504'],
+  [/bradesco|next\b/, '60746948'],
+  [/santander/, '90400888'],
+  [/banco do brasil|\bbb\b|ourocard/, '00000000'],
+  [/caixa|\bcef\b/, '00360305'],
+  [/\binter\b|banco inter/, '00416968'],
+  [/\bc6\b|c6 ?bank/, '31872495'],
+  [/picpay/, '09516419'],
+  [/mercado ?pago|\bmp\b/, '37679449'],
+  [/\bneon\b/, '11285104'],
+  [/\bpan\b|banco pan/, '59285411'],
+  [/\bbtg\b/, '30306294'],
+  [/\bxp\b/, '33264668'],
+  [/\bbv\b/, '01858774'],
+  [/sicoob/, '02038232'],
+  [/banrisul/, '92702067'],
+  [/digio/, '27098060'],
+  [/\bbmg\b/, '61186680'],
+  [/safra/, '58160789'],
+  [/porto ?seguro|porto ?bank/, '04862600'],
+  [/carrefour|atacadao/, '08357240'],
+  [/magalu|magazine ?luiza|luizacred/, '02206577'],
+];
+
+/** banco de um cartão ou conta: o escolhido, ou um palpite pelo nome ("itaú 0194" → itaú). */
+export function bankCodeFor(bankCode: string | null | undefined, name: string): string | null {
+  if (bankCode && BANKS.some((b) => b.code === bankCode)) return bankCode;
+  const n = name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '');
+  return GUESSES.find(([re]) => re.test(n))?.[1] ?? null;
+}

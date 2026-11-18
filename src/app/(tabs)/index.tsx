@@ -3,13 +3,14 @@ import { Check, ChevronRight, Eye, EyeOff, LifeBuoy, SlidersHorizontal, X } from
 import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import {
+  BankBadge,
   Card,
   CategoryIcon,
   EmptyState,
-  GoalMoveSheet,
-  GoalNudgeCard,
   EntryRow,
   FadeIn,
+  GoalMoveSheet,
+  GoalNudgeCard,
   Icon,
   IconButton,
   Money,
@@ -321,7 +322,7 @@ export default function Inicio() {
                 accessibilityRole="button"
                 scaleTo={0.99}
               >
-                <CategoryIcon icon="cartao" size={42} />
+                <BankBadge bankCode={card.bankCode} name={card.name} kind="cartao" size={42} />
                 <View style={{ flex: 1 }}>
                   <Text variant="bodyStrong">{card.name}</Text>
                   <Text variant="small" color={colors.textSoft}>

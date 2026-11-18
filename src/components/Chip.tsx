@@ -1,4 +1,5 @@
 import type { LucideIcon } from 'lucide-react-native';
+import type { ReactNode } from 'react';
 import { StyleSheet } from 'react-native';
 import { colors, radius, space } from '../theme';
 import { Icon } from './Icon';
@@ -10,9 +11,11 @@ interface Props {
   selected?: boolean;
   onPress?: () => void;
   icon?: LucideIcon;
+  /** algo antes do texto no lugar do ícone (ex.: a cor do banco). */
+  leading?: ReactNode;
 }
 
-export function Chip({ label, selected, onPress, icon }: Props) {
+export function Chip({ label, selected, onPress, icon, leading }: Props) {
   const fg = selected ? colors.white : colors.text;
   return (
     <Pressable
@@ -21,7 +24,7 @@ export function Chip({ label, selected, onPress, icon }: Props) {
       accessibilityState={{ selected }}
       style={[styles.base, selected ? styles.on : styles.off]}
     >
-      {icon && <Icon as={icon} size={16} color={fg} />}
+      {leading ?? (icon && <Icon as={icon} size={16} color={fg} />)}
       <Text variant="smallStrong" color={fg}>
         {label}
       </Text>

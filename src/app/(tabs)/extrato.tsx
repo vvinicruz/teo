@@ -1,8 +1,9 @@
 import { router } from 'expo-router';
-import { ChevronLeft, ChevronRight, CreditCard, FileUp, Landmark, Search, SlidersHorizontal, Wallet, X } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, FileUp, Search, SlidersHorizontal, Wallet, X } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 import {
+  BankBadge,
   Button,
   Card,
   CategoryIcon,
@@ -227,10 +228,10 @@ export default function Extrato() {
                 <Chip label="tudo" selected={where === 'tudo'} onPress={() => setWhere('tudo')} />
                 <Chip label={data.accounts.length ? 'conta principal' : 'conta'} icon={Wallet} selected={where === 'conta'} onPress={() => setWhere('conta')} />
                 {data.accounts.map((a) => (
-                  <Chip key={a.id} label={a.name} icon={Landmark} selected={where === `acc:${a.id}`} onPress={() => setWhere(`acc:${a.id}`)} />
+                  <Chip key={a.id} label={a.name} leading={<BankBadge bankCode={a.bankCode} name={a.name} kind="conta" size={20} />} selected={where === `acc:${a.id}`} onPress={() => setWhere(`acc:${a.id}`)} />
                 ))}
                 {data.cards.map((c) => (
-                  <Chip key={c.id} label={c.name} icon={CreditCard} selected={where === c.id} onPress={() => setWhere(c.id)} />
+                  <Chip key={c.id} label={c.name} leading={<BankBadge bankCode={c.bankCode} name={c.name} kind="cartao" size={20} />} selected={where === c.id} onPress={() => setWhere(c.id)} />
                 ))}
               </View>
             </View>
