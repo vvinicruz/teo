@@ -58,7 +58,7 @@ export default function Entrar() {
     return (
       <Screen>
         <FadeIn style={styles.hero}>
-          <Logo height={44} />
+          <Logo height={72} slogan />
           <Text variant="title" center style={{ marginTop: space.xxl }}>
             quase lá!
           </Text>
@@ -81,10 +81,9 @@ export default function Entrar() {
   return (
     <Screen>
       <FadeIn style={styles.hero}>
-        <Logo height={56} />
-        <Text variant="heading" color={colors.primary} style={{ marginTop: space.md }}>
-          tudo em ordem.
-        </Text>
+        <View style={{ marginBottom: space.lg }}>
+          <Logo height={92} slogan />
+        </View>
         <Text color={colors.textSoft} center style={styles.lead}>
           oi! vamos deixar seu dinheiro organizado, do seu jeito e no seu ritmo?
         </Text>

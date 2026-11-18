@@ -54,7 +54,7 @@ function Gate() {
   if (auth.status === 'loading' || (auth.status === 'signedIn' && status === 'loading')) {
     return (
       <View style={styles.center}>
-        <Logo height={48} />
+        <Logo height={80} slogan />
         <ActivityIndicator color={colors.primary} style={{ marginTop: space.xl }} />
       </View>
     );
