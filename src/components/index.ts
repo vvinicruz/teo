@@ -29,3 +29,4 @@ export * from './InvestmentMoveSheet';
 export * from './GoalCelebration';
 export * from './GoalMoveSheet';
 export * from './GoalNudgeCard';
+export * from './UpdateBanner';

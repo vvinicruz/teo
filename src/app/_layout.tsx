@@ -9,7 +9,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Button, FeedbackProvider, GoalCelebration, Logo, Text } from '../components';
+import { Button, FeedbackProvider, GoalCelebration, Logo, Text, UpdateBanner } from '../components';
 import { AuthProvider, useAuth } from '../data/AuthProvider';
 import { DataProvider, useData } from '../data/DataProvider';
 import { colors, space } from '../theme';
@@ -117,6 +117,7 @@ function Gate() {
       <Stack.Screen name="termos" options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="privacidade" options={{ animation: 'slide_from_right' }} />
     </Stack>
+    <UpdateBanner />
     </>
   );
 }
