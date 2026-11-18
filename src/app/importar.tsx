@@ -154,6 +154,7 @@ export default function Importar() {
   }, [rows]);
 
   // o que o teo já resolveu sozinho (mesmo nome, centavos de diferença) não vira pergunta.
+  const autoMatched = rows.filter((r) => r.autoMatched);
   const questions = rows.filter(
     (r) => r.suggestion && !r.autoMatched && ['parecida', 'previsao', 'fatura'].includes(r.suggestion.type),
   );
@@ -251,6 +252,20 @@ export default function Importar() {
           </View>
 
           {statement.invoiceCheck ? <InvoiceCheck check={statement.invoiceCheck} /> : null}
+
+          {autoMatched.length ? (
+            <Card style={[styles.notice, { backgroundColor: colors.incomeSoft }]}>
+              <Icon as={Check} size={18} color={colors.income} />
+              <Text variant="small" color={colors.text} style={{ flex: 1 }}>
+                {autoMatched.length === 1
+                  ? 'reconhecemos sozinhos 1 movimentação que já estava no teo'
+                  : `reconhecemos sozinhos ${autoMatched.length} movimentações que já estavam no teo`}{' '}
+                (mesmo nome, só centavos de diferença).{' '}
+                {autoMatched.length === 1 ? 'ela aparece' : 'elas aparecem'} como &quot;já registrada&quot; na lista e fica valendo o
+                valor do banco.
+              </Text>
+            </Card>
+          ) : null}
 
           {questions.length ? (
             <View style={styles.block}>
@@ -411,7 +426,9 @@ function ImportLine({
         : row.suggestion?.type === 'pagamento-no-cartao'
           ? 'pagamento da fatura (já está na conta)'
           : row.decision === 'pular' && row.suggestion?.type === 'parecida'
-            ? 'já registrada'
+            ? row.autoMatched
+              ? `já registrada: "${row.suggestion.transaction.description}"`
+              : 'já registrada'
             : row.decision === 'vincular' && row.suggestion?.type === 'previsao'
               ? `confirma "${row.suggestion.entry.description}"`
               : row.decision === 'vincular' && row.suggestion?.type === 'fatura'
