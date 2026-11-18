@@ -97,6 +97,7 @@ function Gate() {
         <Stack.Screen name="meta" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="recorrencias" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="planejamento" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="gasto-categoria" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="perfil" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="categorias" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="cartoes" options={{ animation: 'slide_from_right' }} />

@@ -1,8 +1,8 @@
+import { router } from 'expo-router';
 import { ChevronLeft, ChevronRight, FileDown } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import {
-  AmountInput,
   Badge,
   Button,
   Card,
@@ -12,7 +12,6 @@ import {
   Pressable,
   ProgressBar,
   Screen,
-  Sheet,
   Text,
   useFeedback,
 } from '../components';
@@ -33,14 +32,11 @@ const BADGE_TONE: Record<BudgetStatus, 'ok' | 'atencao' | 'perigo'> = { tranquil
 
 /** gastos do mês por categoria, com limite (opcional) para cada uma. */
 export default function GastosPorCategoria() {
-  const { data, setBudget } = useData();
+  const { data } = useData();
   const { forKind, get } = useCategories();
   const { toast } = useFeedback();
   const todayDate = useToday();
   const [month, setMonth] = useState(monthOf(todayDate));
-  const [editing, setEditing] = useState<Category | null>(null);
-  const [value, setValue] = useState(0);
-  const [saving, setSaving] = useState(false);
   const hide = data.settings.hideValues;
   // espaço que não quebra: "R$ 1.950,00" nunca se divide em duas linhas
   const money = (c: number) => (hide ? 'R$ ••••' : formatMoney(c).replace(/ /g, '\u00a0'));
@@ -52,26 +48,9 @@ export default function GastosPorCategoria() {
   const isPast = month < monthOf(todayDate);
   const nameOf = (id: string | null) => (id ? (get(id)?.name ?? 'categoria') : 'sem categoria');
 
-  const open = (id: string | null) => {
-    const c = id ? get(id) : undefined;
-    if (!c) return;
-    setEditing(c);
-    setValue(data.budgets.find((b) => b.categoryId === c.id)?.amount ?? 0);
-  };
-
-  const save = async (amount: number) => {
-    if (!editing) return;
-    setSaving(true);
-    try {
-      await setBudget(editing.id, amount);
-      toast(amount > 0 ? 'limite salvo. vale para todos os meses.' : 'limite removido.', amount > 0 ? 'ok' : 'info');
-      setEditing(null);
-    } catch {
-      toast('não conseguimos salvar agora. tenta de novo?', 'erro');
-    } finally {
-      setSaving(false);
-    }
-  };
+  // detalhes da categoria: gastos do mês, comparação, evolução e limite
+  const open = (id: string | null) =>
+    router.push({ pathname: '/gasto-categoria', params: { id: id ?? 'sem', month } });
 
   const exportPdf = () => {
     if (!downloadSupported) {
@@ -90,8 +69,6 @@ export default function GastosPorCategoria() {
       toast('não conseguimos gerar o relatório agora. tenta de novo?', 'erro');
     }
   };
-
-  const hasLimit = !!editing && data.budgets.some((b) => b.categoryId === editing.id && b.amount > 0);
 
   return (
     <Screen back title="gastos por categoria">
@@ -146,8 +123,8 @@ export default function GastosPorCategoria() {
         <Text variant="heading">{report.withLimit.length ? 'sem limite' : 'por categoria'}</Text>
         <Text variant="small" color={colors.textFaint}>
           {report.withLimit.length
-            ? 'toque numa categoria se quiser definir um limite para ela.'
-            : 'quer acompanhar quanto ainda pode gastar? toque numa categoria e defina um limite por mês. é opcional.'}
+            ? 'toque numa categoria para ver os gastos, comparar com os meses anteriores e, se quiser, definir um limite.'
+            : 'toque numa categoria para ver os gastos e comparar com os meses anteriores. dá pra definir um limite por mês, se quiser.'}
         </Text>
         <Card padded={false}>
           {report.withoutLimit.map((r, i) => {
@@ -155,7 +132,7 @@ export default function GastosPorCategoria() {
             return (
               <Pressable
                 key={r.categoryId ?? 'sem'}
-                onPress={() => (c ? open(r.categoryId) : toast('dá pra escolher a categoria tocando na movimentação, no extrato.', 'info'))}
+                onPress={() => open(r.categoryId)}
                 style={[styles.row, i < report.withoutLimit.length - 1 && styles.rowSep]}
                 accessibilityRole="button"
                 accessibilityLabel={`${nameOf(r.categoryId)}: ${money(r.spent)}`}
@@ -172,11 +149,9 @@ export default function GastosPorCategoria() {
                 </View>
                 <View style={{ alignItems: 'flex-end', gap: 2 }}>
                   <Money value={r.spent} variant="bodyStrong" color={r.spent > 0 ? colors.text : colors.textFaint} />
-                  {c ? (
-                    <Text variant="caption" color={colors.primary}>
-                      definir limite
-                    </Text>
-                  ) : null}
+                  <Text variant="caption" color={colors.primary}>
+                    ver gastos
+                  </Text>
                 </View>
               </Pressable>
             );
@@ -184,14 +159,6 @@ export default function GastosPorCategoria() {
         </Card>
       </View>
 
-      <Sheet visible={!!editing} onClose={() => setEditing(null)} title={editing ? `limite para ${editing.name}` : undefined}>
-        <View style={{ gap: space.lg }}>
-          <Text color={colors.textSoft}>quanto você quer gastar com isso por mês? vale para todos os meses.</Text>
-          <AmountInput value={value} onChange={setValue} autoFocus />
-          <Button label="salvar" onPress={() => save(value)} loading={saving} disabled={value <= 0} />
-          {hasLimit ? <Button label="tirar o limite" variant="ghost" onPress={() => save(0)} /> : null}
-        </View>
-      </Sheet>
     </Screen>
   );
 }

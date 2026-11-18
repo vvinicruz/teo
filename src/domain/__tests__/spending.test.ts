@@ -114,3 +114,53 @@ describe('gastos por categoria', () => {
     expect(r.withoutLimit[0]).toMatchObject({ categoryId: null, spent: 700 });
   });
 });
+
+describe('detalhes da categoria', () => {
+  const brl = (c: number) => `r$ ${(c / 100).toFixed(2)}`;
+  const gastos = (valores: Record<string, number>, extra: Partial<Transaction> = {}) =>
+    Object.entries(valores).map(([date, amount]) => tx({ categoryId: 'lazer', amount, date, ...extra }));
+
+  it('histórico dos últimos meses e gastos do mês', async () => {
+    const { categoryHistory, categoryExpenses } = await import('../spending');
+    const s = base({ transactions: gastos({ '2026-09-10': 1000, '2026-10-05': 2000, '2026-11-03': 500, '2026-11-08': 700 }) });
+    expect(categoryHistory(s, 'lazer', '2026-11', 4).map((m) => [m.month, m.spent, m.active])).toEqual([
+      ['2026-08', 0, false],
+      ['2026-09', 1000, true],
+      ['2026-10', 2000, true],
+      ['2026-11', 1200, true],
+    ]);
+    expect(categoryExpenses(s, 'lazer', '2026-11').map((t) => t.date)).toEqual(['2026-11-08', '2026-11-03']);
+  });
+
+  it('passou do limite todo mês: avisa com cuidado', async () => {
+    const { categoryInsights } = await import('../spending');
+    const s = base({
+      budgets: [{ id: 'b', categoryId: 'lazer', amount: 10000 }],
+      transactions: gastos({ '2026-08-10': 12000, '2026-09-10': 11000, '2026-10-10': 15000, '2026-11-05': 2000 }),
+    });
+    const ins = categoryInsights(s, 'lazer', 'lazer', '2026-11', TODAY, brl);
+    expect(ins[0]).toEqual({ tone: 'atencao', text: expect.stringContaining('nos últimos 3 meses você passou do limite de lazer todas as vezes') });
+  });
+
+  it('gastou menos que no mesmo período do mês passado: elogia', async () => {
+    const { categoryInsights } = await import('../spending');
+    // hoje é dia 12: compara 1–12/11 com 1–12/10 (o gasto de 20/10 não entra)
+    const s = base({ transactions: gastos({ '2026-10-05': 5000, '2026-10-20': 90000, '2026-11-05': 3000 }) });
+    const ins = categoryInsights(s, 'lazer', 'lazer', '2026-11', TODAY, brl);
+    expect(ins).toEqual([{ tone: 'bom', text: 'muito bem! você gastou r$ 20.00 a menos que até o dia 12 do mês passado. isso é ótimo!' }]);
+  });
+
+  it('mês fechado gastou mais: informa, sem bronca', async () => {
+    const { categoryInsights } = await import('../spending');
+    const s = base({ transactions: gastos({ '2026-09-05': 5000, '2026-10-05': 8000 }) });
+    expect(categoryInsights(s, 'lazer', 'lazer', '2026-10', TODAY, brl)).toEqual([
+      { tone: 'neutro', text: 'você gastou r$ 30.00 a mais que em setembro.' },
+    ]);
+  });
+
+  it('sem nada registrado no mês anterior, não compara', async () => {
+    const { categoryInsights } = await import('../spending');
+    const s = base({ transactions: gastos({ '2026-11-05': 3000 }) });
+    expect(categoryInsights(s, 'lazer', 'lazer', '2026-11', TODAY, brl)).toEqual([]);
+  });
+});

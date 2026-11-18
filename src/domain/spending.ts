@@ -3,7 +3,7 @@
  * consumo = despesas realizadas na conta e no cartão, na data da compra (igual ao planejamento).
  * não entram: pagamento de fatura (a compra já foi contada), guardar na caixinha e transferências.
  */
-import { monthOf, type ISODate, type MonthKey } from './dates';
+import { addMonths, monthName, monthOf, type ISODate, type MonthKey } from './dates';
 import { upcomingConsumption, type BudgetStatus } from './finance';
 import { sum, type Cents } from './money';
 import type { Category, Snapshot, Transaction } from './types';
@@ -121,4 +121,109 @@ export function spendingByCategory(
     withLimit,
     withoutLimit,
   };
+}
+
+// ---------- detalhes de uma categoria: histórico, comparação e avisos ----------
+
+/** categoria de um lançamento (categoria apagada conta como "sem categoria"). */
+function categoryKey(s: Snapshot, id?: string | null): string | null {
+  return id && s.categories.some((c) => c.id === id) ? id : null;
+}
+
+/** quanto saiu numa categoria no mês (até um dia, se informado). */
+export function spentIn(s: Snapshot, categoryId: string | null, month: MonthKey, untilDay?: number): Cents {
+  return sum(
+    monthExpenses(s, month)
+      .filter((t) => categoryKey(s, t.categoryId) === categoryId)
+      .filter((t) => untilDay === undefined || Number(t.date.slice(8, 10)) <= untilDay)
+      .map((t) => t.amount),
+  );
+}
+
+/** gastos de uma categoria num mês, do mais recente para o mais antigo. */
+export function categoryExpenses(s: Snapshot, categoryId: string | null, month: MonthKey): Transaction[] {
+  return monthExpenses(s, month)
+    .filter((t) => categoryKey(s, t.categoryId) === categoryId)
+    .sort((a, b) => (a.date === b.date ? b.createdAt.localeCompare(a.createdAt) : b.date.localeCompare(a.date)));
+}
+
+export interface MonthSpending {
+  month: MonthKey;
+  spent: Cents;
+  /** o mês tem algum gasto registrado (em qualquer categoria)? meses sem nada não entram nas comparações. */
+  active: boolean;
+}
+
+/** gastos de uma categoria nos últimos `count` meses, terminando em `month` (do mais antigo ao mais novo). */
+export function categoryHistory(s: Snapshot, categoryId: string | null, month: MonthKey, count = 6): MonthSpending[] {
+  const out: MonthSpending[] = [];
+  for (let i = count - 1; i >= 0; i--) {
+    const m = addMonths(month, -i);
+    out.push({ month: m, spent: spentIn(s, categoryId, m), active: monthExpenses(s, m).length > 0 });
+  }
+  return out;
+}
+
+export interface SpendingInsight {
+  tone: 'bom' | 'atencao' | 'neutro';
+  text: string;
+}
+
+/**
+ * avisos sobre uma categoria num mês, comparando com o mês anterior e com o limite.
+ * no mês atual (ainda em andamento) a comparação é com o mesmo período do mês passado.
+ */
+export function categoryInsights(
+  s: Snapshot,
+  categoryId: string | null,
+  name: string,
+  month: MonthKey,
+  todayDate: ISODate,
+  money: (c: Cents) => string,
+): SpendingInsight[] {
+  const out: SpendingInsight[] = [];
+  const limit = categoryId ? (s.budgets.find((b) => b.categoryId === categoryId && b.amount > 0)?.amount ?? null) : null;
+  const current = monthOf(todayDate);
+  const partial = month === current;
+  const day = Number(todayDate.slice(8, 10));
+  const prev = addMonths(month, -1);
+
+  // limite: como foram os últimos meses fechados
+  if (limit) {
+    const closed = categoryHistory(s, categoryId, partial ? prev : month, 3).filter((m) => m.active);
+    const over = closed.filter((m) => m.spent > limit).length;
+    if (closed.length >= 2 && over === closed.length) {
+      out.push({
+        tone: 'atencao',
+        text: `cuidado: nos últimos ${closed.length} meses você passou do limite de ${name} todas as vezes. que tal rever o limite ou esses gastos?`,
+      });
+    } else if (over >= 2) {
+      out.push({
+        tone: 'atencao',
+        text: `cuidado: em ${over} dos últimos ${closed.length} meses você passou do limite de ${name}.`,
+      });
+    } else if (closed.length >= 2 && over === 0) {
+      out.push({ tone: 'bom', text: `você ficou dentro do limite nos últimos ${closed.length} meses. muito bem!` });
+    }
+  }
+
+  // comparação com o mês anterior
+  const prevActive = monthExpenses(s, prev).length > 0;
+  if (prevActive) {
+    const now = spentIn(s, categoryId, month, partial ? day : undefined);
+    const before = spentIn(s, categoryId, prev, partial ? day : undefined);
+    const ref = partial ? `até o dia ${day} do mês passado` : `em ${monthName(prev)}`;
+    const diff = now - before;
+    if (before > 0 && diff < 0) {
+      out.push({ tone: 'bom', text: `muito bem! você gastou ${money(-diff)} a menos que ${ref}. isso é ótimo!` });
+    } else if (diff > 0 && (before === 0 || diff > before * 0.1)) {
+      out.push({
+        tone: limit && now > limit ? 'atencao' : 'neutro',
+        text: before === 0 ? `${ref} você não tinha gasto nada com ${name}.` : `você gastou ${money(diff)} a mais que ${ref}.`,
+      });
+    } else if (before > 0) {
+      out.push({ tone: 'neutro', text: `você está gastando parecido com ${ref}.` });
+    }
+  }
+  return out;
 }
