@@ -27,12 +27,14 @@ import { friendlyDate, shortDate } from '../domain/dates';
 import { formatMoney } from '../domain/money';
 import { maskedLayout } from '../domain/pdfLayout';
 import { isZip, readXlsx } from '../domain/spreadsheet';
+import { MAIN_ACCOUNT_NAME } from '../domain/types';
 import {
   buildImportRows,
   decodeBytes,
   parsePdfPages,
   parseSpreadsheet,
   parseStatement,
+  OUTSIDE_TEO,
   suggestionText,
   type Decision,
   type ImportRow,
@@ -143,11 +145,20 @@ export default function Importar() {
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, installmentChoice } : r)));
   const setText = (key: string, patch: { description?: string; note?: string }) =>
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  const setTransferTo = (key: string, transferTo: string | null) =>
+    setRows((rs) => rs.map((r) => (r.key === key ? { ...r, transferTo } : r)));
+  // para onde pode ter ido uma transferência entre contas (menos a própria conta do extrato)
+  const transferOptions: { id: string | null; label: string }[] = [
+    { id: null, label: MAIN_ACCOUNT_NAME },
+    ...data.accounts.filter((a) => !a.archived).map((a) => ({ id: a.id, label: a.name })),
+  ]
+    .filter((o) => o.id !== (dest.accountId ?? null))
+    .concat({ id: OUTSIDE_TEO, label: 'uma conta fora do teo' });
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const counts = useMemo(() => {
     const pending = rows.filter((r) => r.decision === null).length;
-    const saving = rows.filter((r) => r.decision === 'importar' || r.decision === 'vincular').length;
+    const saving = rows.filter((r) => r.decision === 'importar' || r.decision === 'vincular' || r.decision === 'transferencia').length;
     // importadas antes com a data errada: só a data é corrigida
     const fixing = rows.filter((r) => r.suggestion?.type === 'ja-importada' && r.suggestion.fix).length;
     return { pending, saving, fixing, skipped: rows.length - pending - saving };
@@ -156,7 +167,7 @@ export default function Importar() {
   // o que o teo já resolveu sozinho (mesmo nome, centavos de diferença) não vira pergunta.
   const autoMatched = rows.filter((r) => r.autoMatched);
   const questions = rows.filter(
-    (r) => r.suggestion && !r.autoMatched && ['parecida', 'previsao', 'fatura'].includes(r.suggestion.type),
+    (r) => r.suggestion && !r.autoMatched && ['parecida', 'previsao', 'fatura', 'minha-conta'].includes(r.suggestion.type),
   );
 
   const save = async () => {
@@ -293,7 +304,21 @@ export default function Importar() {
                   last={i === rows.length - 1}
                   categoryName={get(r.categoryId)?.name}
                   categoryIcon={get(r.categoryId)?.icon}
-                  onToggle={() => setDecision(r.key, r.decision === 'pular' ? (r.suggestion?.type === 'previsao' || r.suggestion?.type === 'fatura' ? 'vincular' : 'importar') : 'pular')}
+                  onToggle={() =>
+                    setDecision(
+                      r.key,
+                      r.decision !== 'pular'
+                        ? 'pular'
+                        : r.suggestion?.type === 'previsao' || r.suggestion?.type === 'fatura'
+                          ? 'vincular'
+                          : r.suggestion?.type === 'minha-conta'
+                            ? 'transferencia'
+                            : 'importar',
+                    )
+                  }
+                  transferOptions={cardId ? null : transferOptions}
+                  onTransferTo={(id) => setTransferTo(r.key, id)}
+                  onMarkTransfer={(yes) => setDecision(r.key, yes ? 'transferencia' : 'importar')}
                   onCategory={() => setEditing(r)}
                 />
               ))}
@@ -359,11 +384,18 @@ function LayoutHelp({ onCopy }: { onCopy: () => void }) {
 function QuestionCard({ row, onAnswer }: { row: ImportRow; onAnswer: (d: Decision) => void }) {
   const sug = row.suggestion!;
   const answered = row.decision !== null;
-  const yes: Decision = sug.type === 'parecida' ? 'pular' : 'vincular';
+  const yes: Decision = sug.type === 'parecida' ? 'pular' : sug.type === 'minha-conta' ? 'transferencia' : 'vincular';
+  // já importada como gasto: "não" = deixa como está (não importa de novo)
+  const no: Decision = sug.type === 'minha-conta' && sug.existing ? 'pular' : 'importar';
   const labels =
     sug.type === 'parecida'
       ? { yes: 'é a mesma', no: 'são diferentes' }
-      : sug.type === 'fatura'
+      : sug.type === 'minha-conta'
+        ? {
+            yes: 'sim, entre minhas contas',
+            no: sug.existing ? 'não, deixa como está' : row.kind === 'despesa' ? 'não, foi um gasto' : 'não, foi uma receita',
+          }
+        : sug.type === 'fatura'
         ? { yes: 'sim, é a fatura', no: 'não é' }
         : { yes: 'sim, é isso', no: 'não, é outra coisa' };
   return (
@@ -382,8 +414,8 @@ function QuestionCard({ row, onAnswer }: { row: ImportRow; onAnswer: (d: Decisio
         <Button
           label={labels.no}
           small
-          variant={row.decision === 'importar' ? 'primary' : 'ghost'}
-          onPress={() => onAnswer('importar')}
+          variant={row.decision === no ? 'primary' : 'ghost'}
+          onPress={() => onAnswer(no)}
           style={{ flex: 1 }}
         />
       </View>
@@ -402,6 +434,9 @@ function ImportLine({
   categoryIcon,
   onToggle,
   onCategory,
+  transferOptions,
+  onTransferTo,
+  onMarkTransfer,
 }: {
   row: ImportRow;
   expanded: boolean;
@@ -413,12 +448,21 @@ function ImportLine({
   categoryIcon?: string;
   onToggle: () => void;
   onCategory: () => void;
+  /** extrato de conta: contas para onde pode ter ido uma transferência (null = extrato de cartão). */
+  transferOptions: { id: string | null; label: string }[] | null;
+  onTransferTo: (id: string | null) => void;
+  onMarkTransfer: (yes: boolean) => void;
 }) {
   const on = row.decision !== 'pular';
+  const isTransfer = row.decision === 'transferencia';
   const income = row.kind === 'receita';
   const note =
     row.decision === null
       ? 'aguardando sua resposta'
+      : isTransfer
+        ? row.autoMatched
+          ? 'entre suas contas (como da outra vez)'
+          : 'entre suas contas · não conta como gasto'
       : row.suggestion?.type === 'ja-importada'
         ? row.suggestion.fix
           ? 'já importada · vamos corrigir a data'
@@ -434,7 +478,7 @@ function ImportLine({
               : row.decision === 'vincular' && row.suggestion?.type === 'fatura'
                 ? `paga a fatura do ${row.suggestion.card.name}`
                 : null;
-  const linked = row.decision === 'vincular' || row.suggestion?.type === 'pagamento-no-cartao';
+  const linked = row.decision === 'vincular' || isTransfer || row.suggestion?.type === 'pagamento-no-cartao';
   return (
     <View style={[styles.line, !last && styles.lineSep, !on && { opacity: 0.5 }]}>
       <Pressable
@@ -471,6 +515,13 @@ function ImportLine({
               multiline
               style={{ height: 80, paddingTop: space.md, textAlignVertical: 'top' }}
             />
+            {transferOptions && (row.decision === 'importar' || isTransfer) ? (
+              <Chip
+                label="foi entre minhas contas (não é gasto)"
+                selected={isTransfer}
+                onPress={() => onMarkTransfer(!isTransfer)}
+              />
+            ) : null}
             <Button label="pronto" small variant="secondary" onPress={onExpand} style={{ alignSelf: 'flex-start' }} />
           </View>
         ) : null}
@@ -488,6 +539,23 @@ function ImportLine({
           ) : null}
           {note ? <Badge label={note} tone={row.decision === null ? 'atencao' : 'neutro'} /> : null}
         </View>
+        {isTransfer && transferOptions ? (
+          <View style={styles.installment}>
+            <Text variant="caption" color={colors.textSoft}>
+              {row.kind === 'despesa' ? 'foi para qual conta sua?' : 'veio de qual conta sua?'}
+            </Text>
+            <View style={styles.installmentChips}>
+              {transferOptions.map((o) => (
+                <Chip
+                  key={o.id ?? 'principal'}
+                  label={o.label}
+                  selected={(row.transferTo === undefined ? OUTSIDE_TEO : row.transferTo) === o.id}
+                  onPress={() => onTransferTo(o.id)}
+                />
+              ))}
+            </View>
+          </View>
+        ) : null}
         {row.installment && row.decision === 'importar' ? (
           <View style={styles.installment}>
             <Text variant="caption" color={colors.textSoft}>

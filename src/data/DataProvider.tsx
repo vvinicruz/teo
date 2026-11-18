@@ -13,7 +13,7 @@ import { occurrenceDate, occurrenceIndex, recurrenceOccurrences } from '../domai
 import { MAIN_ACCOUNT_NAME } from '../domain/types';
 import { emptySnapshot } from '../domain/defaults';
 import type { Entry } from '../domain/finance';
-import { fitDescription, type ImportRow } from '../domain/importer';
+import { fitDescription, OUTSIDE_TEO, type ImportRow } from '../domain/importer';
 import type {
   Account,
   Budget,
@@ -328,6 +328,41 @@ export function DataProvider({ children }: { children: ReactNode }) {
             externalId: row.line.externalId,
             ...(row.note.trim() ? { note: row.note.trim().slice(0, 500) } : {}),
           };
+          if (row.decision === 'transferencia' && !cardId) {
+            // dinheiro entre contas da própria pessoa: não é gasto nem receita.
+            const existing = row.suggestion?.type === 'minha-conta' ? row.suggestion.existing : undefined;
+            const transferId = newId();
+            const side: Transaction = {
+              ...existing,
+              id: existing?.id ?? newId(),
+              kind: row.kind,
+              description: fitDescription(row.description),
+              categoryId: null,
+              status: 'realizada',
+              paymentMethod: 'transferencia',
+              transferId,
+              accountId: existing ? (existing.accountId ?? null) : accountId,
+              createdAt: existing?.createdAt ?? now,
+              ...fromStatement,
+            };
+            items.push(side);
+            const other = row.transferTo === undefined ? OUTSIDE_TEO : row.transferTo;
+            const from = side.accountId ?? null;
+            if (other !== OUTSIDE_TEO && other !== from) {
+              const name = (id: string | null) =>
+                id ? (dataRef.current.accounts.find((a) => a.id === id)?.name ?? 'conta') : MAIN_ACCOUNT_NAME;
+              items.push({
+                ...side,
+                id: newId(),
+                kind: row.kind === 'despesa' ? 'receita' : 'despesa',
+                description: row.kind === 'despesa' ? `transferência de ${name(from)}` : `transferência para ${name(from)}`,
+                accountId: other,
+                externalId: null,
+                note: null,
+              });
+            }
+            continue;
+          }
           if (row.decision === 'importar') {
             const tx: Transaction = {
               id: newId(),

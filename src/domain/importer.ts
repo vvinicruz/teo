@@ -612,9 +612,15 @@ export type Suggestion =
   /** no extrato da conta: parece o pagamento de uma fatura. */
   | { type: 'fatura'; card: Card; invoiceDate: ISODate; invoiceTotal: Cents }
   /** no extrato do cartão: é o pagamento da fatura, que já aparece na conta. */
-  | { type: 'pagamento-no-cartao' };
+  | { type: 'pagamento-no-cartao' }
+  /** pix/transferência que parece ser para outra conta da própria pessoa (nome dela, ou já marcado antes). */
+  | { type: 'minha-conta'; reason: 'nome' | 'antes'; existing?: Transaction };
 
-export type Decision = 'importar' | 'pular' | 'vincular';
+/** transferencia = dinheiro entre contas da própria pessoa: não é gasto nem receita. */
+export type Decision = 'importar' | 'pular' | 'vincular' | 'transferencia';
+
+/** transferência para uma conta que não está cadastrada no teo. */
+export const OUTSIDE_TEO = 'fora';
 
 export interface ImportRow {
   key: string;
@@ -637,7 +643,23 @@ export interface ImportRow {
   invoiceDate: ISODate | null;
   /** o teo teve certeza (mesmo nome e diferença de centavos) e já respondeu a pergunta sozinho. */
   autoMatched?: boolean;
+  /** transferência entre contas: a outra conta (id, null = conta principal, OUTSIDE_TEO = fora do teo). */
+  transferTo?: string | null;
 }
+
+const TRANSFER_RE = /\bpix\b|transf|\bted\b|\bdoc\b|\btef\b/;
+
+/** o nome da pessoa aparece na descrição? ("pix transf viniciu11 10" com o nome "vini") */
+export function mentionsOwnName(description: string, ownName: string): boolean {
+  const names = normalize(ownName).split(/[^a-z]+/).filter((n) => n.length >= 3);
+  const words = normalize(description).split(/[^a-z]+/).filter((w) => w.length >= 3);
+  return names.some((n) =>
+    words.some((w) => w === n || (Math.min(n.length, w.length) >= 4 && (w.startsWith(n) || n.startsWith(w)))),
+  );
+}
+
+/** descrição sem números (datas e códigos mudam a cada pix: "viniciu11 10" e "viniciu16 10"). */
+const withoutDigits = (text: string) => text.replace(/\d+/g, ' ');
 
 export type InstallmentChoice = 'so-esta' | 'proximas' | 'todas';
 
@@ -739,9 +761,25 @@ export function buildImportRows(
   const importedIds = new Set(s.transactions.map((t) => t.externalId).filter(Boolean));
   // compara com o mesmo cartão e também com o que foi lançado nas contas: a pessoa pode ter
   // registrado a compra sem escolher o cartão (ou a conta) certo. outros cartões ficam de fora.
+  // transferências entre contas: só o lado desta conta (para reconhecer uma já registrada no teo).
   const sameDestination = s.transactions.filter(
-    (t) => (!t.cardId || t.cardId === cardId) && !t.paysCardId && !t.transferId && !t.investmentId,
+    (t) =>
+      (!t.cardId || t.cardId === cardId) &&
+      !t.paysCardId &&
+      !t.investmentId &&
+      (!t.transferId || (!cardId && (t.accountId ?? null) === (dest.accountId ?? null))),
   );
+  // transferências que a pessoa já marcou como "entre minhas contas" em importações anteriores
+  const ownTransfers = s.transactions.filter((t) => t.transferId && t.externalId);
+  const ownTransfer = (line: StatementLine, kind: Kind): { reason: 'nome' | 'antes'; transferTo: string | null } | null => {
+    if (!TRANSFER_RE.test(normalize(line.description))) return null;
+    const before = ownTransfers.find(
+      (t) => t.kind === kind && nameSimilarity(withoutDigits(t.description), withoutDigits(line.description)) >= SAME_NAME,
+    );
+    if (!before && !mentionsOwnName(line.description, s.settings.name)) return null;
+    const other = before ? s.transactions.find((t) => t.transferId === before.transferId && t.id !== before.id) : undefined;
+    return { reason: before ? 'antes' : 'nome', transferTo: other ? (other.accountId ?? null) : OUTSIDE_TEO };
+  };
 
   const lastDate = statement.lines.reduce((m, l) => (l.date > m ? l.date : m), todayDate);
   const horizonEnd = lastDay(monthOf(addDays(lastDate, 31)));
@@ -785,8 +823,19 @@ export function buildImportRows(
     const d = normalize(line.description);
 
     if (line.externalId && importedIds.has(line.externalId)) {
-      // importada antes com outra data (versão antiga do teo): aproveitamos para corrigir.
       const before = s.transactions.find((t) => t.externalId === line.externalId);
+      // importada antes como gasto, mas parece pix para a própria pessoa: oferece transformar em transferência.
+      const own = !cardId && before && !before.transferId ? ownTransfer(line, kind) : null;
+      if (own && before) {
+        return {
+          ...row,
+          categoryId: null,
+          suggestion: { type: 'minha-conta', reason: own.reason, existing: before },
+          decision: null,
+          transferTo: own.transferTo,
+        };
+      }
+      // importada antes com outra data (versão antiga do teo): aproveitamos para corrigir.
       const wrong = !!before && !!cardId && before.cardId === cardId &&
         (before.date !== row.date || (before.invoiceDate ?? null) !== row.invoiceDate);
       return { ...row, suggestion: { type: 'ja-importada', fix: wrong ? before : undefined }, decision: 'pular' };
@@ -849,6 +898,19 @@ export function buildImportRows(
         suggestion: { type: 'parecida', transaction: twin, sameDay: twin.date === line.date },
         decision: auto ? 'pular' : null,
         autoMatched: auto,
+      };
+    }
+
+    // pix/transferência para a própria pessoa (outra conta dela): pergunta, ou já marca se ela marcou um igual antes.
+    const own = cardId ? null : ownTransfer(line, kind);
+    if (own) {
+      return {
+        ...row,
+        categoryId: null,
+        suggestion: { type: 'minha-conta', reason: own.reason },
+        decision: own.reason === 'antes' ? 'transferencia' : null,
+        autoMatched: own.reason === 'antes',
+        transferTo: own.transferTo,
       };
     }
 
@@ -932,6 +994,11 @@ function cardPredictions(s: Snapshot, cardId: string, to: ISODate): Entry[] {
 /** frase amigável para a pergunta de cada linha. */
 export function suggestionText(sug: Suggestion, shortDate: (d: ISODate) => string): string {
   switch (sug.type) {
+    case 'minha-conta':
+      if (sug.existing) return 'já foi importada como gasto, mas parece um pix para você mesmo. foi entre suas contas?';
+      return sug.reason === 'antes'
+        ? 'você já marcou uma parecida como transferência entre suas contas.'
+        : 'parece um pix para você mesmo, numa outra conta sua. foi entre suas contas?';
     case 'ja-importada':
       return sug.fix
         ? 'essa já foi importada antes, mas com a data errada. vamos só corrigir a data.'
