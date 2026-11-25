@@ -52,7 +52,7 @@ export const TOURS: Tour[] = [
         route: '/',
         target: 'tab-add',
         title: 'o botão mais importante',
-        text: 'é no + que você registra um gasto ou uma receita. leva segundos.',
+        text: 'é no + (no computador, no botão "novo lançamento") que você registra um gasto ou uma receita. leva segundos.',
         advanceOnRoute: '/movimentacao',
       },
       {
@@ -107,12 +107,12 @@ export const TOURS: Tour[] = [
         route: '/',
         target: 'home-perfil',
         title: 'seu perfil',
-        text: 'contas e cartões, caixinhas, imposto de renda e a ajuda ficam aqui. na ajuda dá pra refazer este passo a passo quando quiser.',
+        text: 'contas e cartões, caixinhas, imposto de renda e a ajuda ficam aqui. no computador, tudo isso também está na barra lateral, à esquerda. na ajuda dá pra refazer este passo a passo quando quiser.',
       },
       {
         route: '/',
         title: 'agora é com você!',
-        text: 'que tal começar registrando o seu primeiro gasto no +? qualquer dúvida, a ajuda está no seu perfil.',
+        text: 'que tal começar registrando o seu primeiro gasto no + (ou em "novo lançamento", no computador)? qualquer dúvida, a ajuda está no seu perfil.',
       },
     ],
   },
